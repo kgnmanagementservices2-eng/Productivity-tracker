@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    /* Sets the universal background and default text color */
+    background: linear-gradient(180deg, #f8fbff 0%, #aac2f9 100%);
+    color: #0f172a; /* text-slate-900 for crisp readability */
+
+    /* Optional: Smooth background transitions if you ever add dark mode */
+    transition: background-color 0.2s ease-in-out;
+  }
+}
