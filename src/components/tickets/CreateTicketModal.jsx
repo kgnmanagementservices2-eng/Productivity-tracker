@@ -1,5 +1,9 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+// /* eslint-disable no-unused-vars */
+// /* eslint-disable react-hooks/exhaustive-deps */
+
 /* eslint-disable no-unused-vars */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -10,7 +14,6 @@ import api from "../../services/api";
 import { Button } from "../common/Button";
 import { Card, CardHeader, CardTitle, CardContent } from "../common/Card";
 import { useAuth } from "../../hooks/useAuth";
-// 🟢 NEW: Import the live presence hook
 import { useOnlineUsers } from "../../context/SocketContext";
 
 const ticketSchema = z.object({
@@ -25,8 +28,8 @@ const ticketSchema = z.object({
 });
 
 export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
-  const { user } = useAuth();
-  // 🟢 NEW: Fetch the live status dictionary
+  // 🟢 FIX 1: Extract 'loading' to prevent race conditions
+  const { user, loading } = useAuth();
   const onlineUsers = useOnlineUsers() || {};
 
   const [departments, setDepartments] = useState([]);
@@ -55,65 +58,133 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
     },
   });
 
-  const selectedDeptId = watch("departmentId");
+  const selectedDeptId = watch("departmentId") ?? "";
   const selectedCategoryName = watch("categoryLevel1");
 
-  const isAdminOrManager = [
-    "GLOBAL_ADMIN",
-    "CEO",
-    "BACK_OFFICE_MANAGER",
-  ].includes(user?.role);
-  const canAssignStore = ["MARKET_MANAGER", "EMPLOYEE"].includes(user?.role);
+  const canAssignTask = useMemo(
+    () =>
+      [
+        "GLOBAL_ADMIN",
+        "CEO",
+        "BACK_OFFICE_MANAGER",
+        "BACK_OFFICE_MEMBER",
+      ].includes(user?.role),
+    [user?.role],
+  );
 
-  // Auto-select Department for Managers
+  const userDeptId = user
+    ? String(user.department_id || user.departmentId || "")
+    : "";
+
+  const isBackOfficeStaff = useMemo(
+    () => ["BACK_OFFICE_MANAGER", "BACK_OFFICE_MEMBER"].includes(user?.role),
+    [user?.role],
+  );
+  const canAssignStore = useMemo(
+    () => ["MARKET_MANAGER", "EMPLOYEE"].includes(user?.role),
+    [user?.role],
+  );
+
   useEffect(() => {
-    if (isOpen && user) {
-      api
-        .get("/tickets/departments")
-        .then((res) => {
-          const fetchedDepts = res.data.data || [];
-          setDepartments(fetchedDepts);
+    if (!isOpen) return;
+    reset({
+      priority: "STANDARD",
+      storeId: user?.store_id || "",
+      departmentId: isBackOfficeStaff ? userDeptId : "",
+      categoryLevel1: "",
+      categoryLevel2: "",
+      assigneeId: "",
+      tat: "",
+      userComments: "",
+    });
+  }, [isOpen, user, reset, isBackOfficeStaff, userDeptId]);
 
-          if (user?.role === "BACK_OFFICE_MANAGER") {
-            const managerDeptId = user.department_id || user.departmentId;
-            if (managerDeptId) {
-              const exists = fetchedDepts.find(
-                (d) => String(d.id) === String(managerDeptId),
-              );
-              if (exists) {
-                setValue("departmentId", String(managerDeptId), {
-                  shouldValidate: true,
-                });
-              }
-            }
-          }
-        })
-        .catch(() => toast.error("Failed to load departments"));
+  const loadDropdowns = async () => {
+    try {
+      const deptPromise = api.get("/tickets/departments");
+      const storePromise =
+        canAssignStore && user
+          ? api.get("/tickets/stores")
+          : Promise.resolve({ data: { data: [] } });
+
+      const [deptRes, storeRes] = await Promise.all([
+        deptPromise,
+        storePromise,
+      ]);
+
+      const fetchedDepts = deptRes.data.data || [];
+      setDepartments(fetchedDepts);
+
+      if (isBackOfficeStaff && userDeptId) {
+        const exists = fetchedDepts.find((d) => String(d.id) === userDeptId);
+        if (exists) {
+          setValue("departmentId", userDeptId, {
+            shouldValidate: true,
+          });
+        }
+      }
+
+      if (canAssignStore && user) {
+        const allStores = storeRes.data.data || [];
+        const userMarketId = String(user.market_id || user.marketId);
+
+        const displayStores = canAssignTask
+          ? allStores
+          : allStores.filter(
+              (s) => String(s.market_id || s.marketId) === userMarketId,
+            );
+
+        setStores(displayStores);
+      }
+    } catch (error) {
+      toast.error("Failed to load ticket dropdowns");
     }
-  }, [isOpen, user, setValue]);
+  };
 
-  // Bulletproof Store Loading
+  // useEffect(() => {
+  //   if (!isOpen || !user) return;
+  //   loadDropdowns();
+  // }, [
+  //   isOpen,
+  //   user,
+  //   userDeptId,
+  //   isBackOfficeStaff,
+  //   canAssignStore,
+  //   canAssignTask,
+  //   setValue,
+  // ]);
   useEffect(() => {
-    if (isOpen && canAssignStore && user) {
-      api
-        .get("/tickets/stores")
-        .then((res) => {
-          const allStores = res.data.data || [];
-          const userMarketId = String(user.market_id || user.marketId);
-
-          const displayStores = isAdminOrManager
-            ? allStores
-            : allStores.filter(
-                (s) => String(s.market_id || s.marketId) === userMarketId,
-              );
-
-          setStores(displayStores);
-        })
-        .catch(() => toast.error("Failed to load stores"));
-    }
-  }, [isOpen, user, canAssignStore, isAdminOrManager]);
-
+    // 🟢 Guard against the loading state
+    if (!isOpen || loading || !user) return;
+    loadDropdowns();
+  }, [
+    isOpen,
+    loading, // <-- add to dependency array
+    user,
+    userDeptId,
+    isBackOfficeStaff,
+    canAssignStore,
+    canAssignTask,
+    setValue,
+  ]);
   useEffect(() => {
+    if (!user) return;
+    if (departments.length > 0) return;
+    loadDropdowns();
+  }, [
+    user,
+    departments.length,
+    canAssignStore,
+    canAssignTask,
+    isBackOfficeStaff,
+    userDeptId,
+    setValue,
+  ]);
+
+  // 3. Fetch Categories and Members when Department Changes
+  useEffect(() => {
+    if (!user) return;
+
     if (!selectedDeptId) {
       setCategories([]);
       setDepartmentMembers([]);
@@ -124,7 +195,9 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
     }
 
     const fetchDepartmentDetails = async () => {
-      const selectedDept = departments.find((d) => d.id === selectedDeptId);
+      const selectedDept = departments.find(
+        (d) => String(d.id) === String(selectedDeptId),
+      );
       if (!selectedDept) return;
 
       setIsFetchingCategories(true);
@@ -137,7 +210,7 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
         setIsFetchingCategories(false);
       }
 
-      if (isAdminOrManager) {
+      if (canAssignTask) {
         setIsFetchingMembers(true);
         try {
           const userRes = await api.get(`/groups/users`);
@@ -150,7 +223,6 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
               String(u.department_name || u.departmentName || u.department) ===
               String(selectedDept.name);
 
-            // Ensure we are only grabbing Back Office staff
             const isBackOffice =
               u.role === "BACK_OFFICE_MEMBER" ||
               u.role === "BACK_OFFICE_MANAGER";
@@ -159,6 +231,14 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
           });
 
           setDepartmentMembers(members);
+
+          // If it's a standard member, instantly auto-assign the ticket to themselves
+          if (user?.role === "BACK_OFFICE_MEMBER") {
+            const currentUserId = String(user.id || user.userId);
+            if (members.some((m) => String(m.id) === currentUserId)) {
+              setValue("assigneeId", currentUserId, { shouldValidate: true });
+            }
+          }
         } catch (error) {
           console.error("Failed to fetch department members");
         } finally {
@@ -169,14 +249,14 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
 
     fetchDepartmentDetails();
 
-    // Only clear assignee and categories if the user is manually changing departments
-    if (selectedDeptId !== (user?.department_id || user?.departmentId)) {
+    if (String(selectedDeptId) !== String(userDeptId)) {
       setValue("categoryLevel1", "");
       setValue("categoryLevel2", "");
       setValue("assigneeId", "");
     }
-  }, [selectedDeptId, departments, setValue, isAdminOrManager, user]);
+  }, [selectedDeptId, departments, setValue, canAssignTask, user]);
 
+  // 4. Handle Subcategories
   useEffect(() => {
     if (!selectedCategoryName) {
       setAvailableSubcategories([]);
@@ -244,19 +324,19 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
           ? data.storeId
           : user?.store_id || null;
 
-      const finalDepartmentId =
-        user?.role === "BACK_OFFICE_MANAGER"
-          ? user.department_id || user.departmentId
-          : data.departmentId;
+      // Ensure proper target department
+      const finalDepartmentId = isBackOfficeStaff
+        ? user.department_id || user.departmentId
+        : data.departmentId;
 
       const ticketPayload = {
         ...data,
         departmentId: finalDepartmentId,
         assigneeId: cleanAssigneeId,
         tat: cleanTat,
-        market_id: isAdminOrManager ? null : targetMarketId,
-        store_id: isAdminOrManager ? null : cleanStoreId,
-        ticketType: isAdminOrManager ? "PROACTIVE" : "REACTIVE",
+        market_id: canAssignTask ? null : targetMarketId,
+        store_id: canAssignTask ? null : cleanStoreId,
+        ticketType: canAssignTask ? "PROACTIVE" : "REACTIVE",
         generatedEmailBody,
         attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
       };
@@ -264,8 +344,8 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
       await api.post("/tickets", ticketPayload);
 
       toast.success(
-        isAdminOrManager
-          ? "Proactive Task assigned successfully!"
+        canAssignTask
+          ? "Proactive Task created successfully!"
           : "Ticket submitted and routed successfully!",
       );
       onSuccess();
@@ -292,11 +372,11 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
 
         <CardHeader>
           <CardTitle>
-            {isAdminOrManager ? "Assign Task to Team" : "Create a New Ticket"}
+            {canAssignTask ? "Create Proactive Task" : "Create a New Ticket"}
           </CardTitle>
           <p className="text-sm text-slate-500">
-            {isAdminOrManager
-              ? "Assign targeted tasks to back-office members with deadlines."
+            {canAssignTask
+              ? "Assign targeted tasks with deadlines to specific members."
               : "Submit an issue and our smart router will assign it immediately."}
           </p>
         </CardHeader>
@@ -310,9 +390,9 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
                 </label>
                 <select
                   {...register("departmentId")}
-                  tabIndex={user?.role === "BACK_OFFICE_MANAGER" ? -1 : 0}
+                  tabIndex={isBackOfficeStaff ? -1 : 0}
                   className={`flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 ${
-                    user?.role === "BACK_OFFICE_MANAGER"
+                    isBackOfficeStaff
                       ? "pointer-events-none bg-slate-50 opacity-80"
                       : ""
                   }`}
@@ -331,7 +411,7 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
                 )}
               </div>
 
-              {isAdminOrManager ? (
+              {canAssignTask ? (
                 <div className="flex flex-col space-y-1.5">
                   <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
                     <Users size={14} className="text-indigo-600" /> Members in
@@ -346,7 +426,12 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
                   <select
                     {...register("assigneeId")}
                     disabled={!selectedDeptId || departmentMembers.length === 0}
-                    className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-400"
+                    tabIndex={user?.role === "BACK_OFFICE_MEMBER" ? -1 : 0}
+                    className={`flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-400 ${
+                      user?.role === "BACK_OFFICE_MEMBER"
+                        ? "pointer-events-none bg-slate-50 opacity-80"
+                        : ""
+                    }`}
                   >
                     <option value="">
                       {!selectedDeptId
@@ -355,13 +440,11 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
                           ? "No members found in this department"
                           : "Auto-Route via Smart Router"}
                     </option>
-                    {/* 🟢 NEW: Sort by live presence and add indicator dots */}
                     {[...departmentMembers]
                       .sort((a, b) => {
                         const statusA = onlineUsers[String(a.id)] || "offline";
                         const statusB = onlineUsers[String(b.id)] || "offline";
 
-                        // Weights: Online = 2, Away = 1, Offline = 0
                         const weight = { online: 2, away: 1, offline: 0 };
 
                         return weight[statusB] - weight[statusA];
@@ -479,7 +562,7 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {isAdminOrManager && (
+              {canAssignTask && (
                 <div className="flex flex-col space-y-1.5">
                   <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
                     <Calendar size={14} className="text-indigo-600" />{" "}
@@ -516,7 +599,7 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
                 {...register("userComments")}
                 className="flex min-h-[80px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
                 placeholder={
-                  isAdminOrManager
+                  canAssignTask
                     ? "Describe the proactive task details here..."
                     : "Please describe the issue in detail..."
                 }
@@ -543,11 +626,11 @@ export const CreateTicketModal = ({ isOpen, onClose, onSuccess }) => {
                 {isUploading
                   ? "Uploading File..."
                   : isSubmitting
-                    ? isAdminOrManager
+                    ? canAssignTask
                       ? "Assigning Task..."
                       : "Routing Ticket..."
-                    : isAdminOrManager
-                      ? "Assign Task"
+                    : canAssignTask
+                      ? "Create Task"
                       : "Submit Ticket"}
               </Button>
             </div>

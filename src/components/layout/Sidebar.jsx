@@ -1,128 +1,7 @@
-// import { NavLink } from "react-router-dom";
-// import { useAuth } from "../../hooks/useAuth";
-// import { cn } from "../../utils/cn";
-// import {
-//   LayoutDashboard,
-//   Ticket,
-//   Settings,
-//   Users,
-//   PhoneCall,
-//   MessageSquare,
-//   FolderTree,
-// } from "lucide-react";
-
-// export const Sidebar = () => {
-//   const { user } = useAuth();
-
-//   // The Master Navigation Configuration
-//   const navItems = [
-//     {
-//       name: "Dashboard",
-//       path: "/dashboard",
-//       icon: LayoutDashboard,
-//       allowedRoles: [
-//         "CEO",
-//         "GLOBAL_ADMIN",
-//         "MARKET_MANAGER",
-//         "EMPLOYEE",
-//         "BACK_OFFICE_MANAGER",
-//         "BACK_OFFICE_MEMBER",
-//       ],
-//     },
-//     {
-//       name: "My Tickets",
-//       path: "/tickets",
-//       icon: Ticket,
-//       allowedRoles: [
-//         "EMPLOYEE",
-//         "BACK_OFFICE_MANAGER",
-//         "BACK_OFFICE_MEMBER",
-//         "GLOBAL_ADMIN",
-//         "MARKET_MANAGER",
-//       ],
-//     },
-//     {
-//       name: "Active Huddles",
-//       path: "/huddles",
-//       icon: PhoneCall,
-//       allowedRoles: ["BACK_OFFICE_MANAGER", "BACK_OFFICE_MEMBER"],
-//     },
-//     {
-//       name: "Team Groups",
-//       path: "/groups",
-//       icon: MessageSquare,
-//       allowedRoles: [
-//         "CEO",
-//         "GLOBAL_ADMIN",
-//         "MARKET_MANAGER",
-//         "EMPLOYEE",
-//         "BACK_OFFICE_MANAGER",
-//         "BACK_OFFICE_MEMBER",
-//       ],
-//     },
-//     {
-//       name: "Team Workload",
-//       path: "/workload",
-//       icon: Users,
-//       allowedRoles: ["BACK_OFFICE_MANAGER", "GLOBAL_ADMIN"],
-//     },
-//     {
-//       name: "Category Routing",
-//       path: "/categories", // Make sure this matches your Route path in App.jsx!
-//       icon: FolderTree,
-//       allowedRoles: ["GLOBAL_ADMIN", "BACK_OFFICE_MANAGER"],
-//     },
-//     {
-//       name: "Company Setup",
-//       path: "/admin",
-//       icon: Settings,
-//       allowedRoles: ["CEO", "GLOBAL_ADMIN"],
-//     },
-//   ];
-
-//   // Filter links based on the user's secure JWT role
-//   const visibleLinks = navItems.filter((item) =>
-//     item.allowedRoles.includes(user?.role),
-//   );
-
-//   return (
-//     <aside className="w-64 text-slate-300 flex flex-col h-screen fixed left-0 top-0 bg-[var(--tenant-primary,#0f172a)]">
-//       {/* Brand Logo Area */}
-//       <div className="h-16 flex items-center px-6 border-b border-black/20 bg-black/20">
-//         <span className="text-white font-bold text-lg tracking-wide">
-//           Ticket Tracker
-//         </span>
-//       </div>
-
-//       {/* Navigation Links */}
-//       <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-//         {visibleLinks.map((link) => {
-//           const Icon = link.icon;
-//           return (
-//             <NavLink
-//               key={link.name}
-//               to={link.path}
-//               className={({ isActive }) =>
-//                 cn(
-//                   "flex items-center gap-3 px-3 py-2 rounded-md transition-colors font-medium text-sm",
-//                   isActive
-//                     ? "bg-white text-[var(--tenant-primary,#0f172a)] shadow-sm" // Inverted for active state!
-//                     : "hover:bg-white/10 hover:text-white text-white/70",
-//                 )
-//               }
-//             >
-//               <Icon size={18} />
-//               {link.name}
-//             </NavLink>
-//           );
-//         })}
-//       </nav>
-//     </aside>
-//   );
-// };
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { cn } from "../../utils/cn";
+import logo from "../../assets/logo.png";
 import {
   LayoutDashboard,
   Ticket,
@@ -172,12 +51,7 @@ export const Sidebar = () => {
       path: "/huddles",
       icon: PhoneCall,
       group: "Overview",
-      allowedRoles: [
-        "BACK_OFFICE_MANAGER",
-        "BACK_OFFICE_MEMBER",
-        "GLOBAL_ADMIN",
-        "CEO",
-      ],
+      allowedRoles: ["GLOBAL_ADMIN", "CEO"],
     },
     {
       name: "Team Groups",
@@ -231,7 +105,7 @@ export const Sidebar = () => {
   return (
     <aside className="w-64 flex flex-col h-screen fixed left-0 top-0 bg-[var(--tenant-primary,#020617)] border-r border-white/10 z-50">
       {/* Brand Logo Area */}
-      <div className="h-16 flex items-center px-6 border-b border-white/10 shrink-0">
+      {/* <div className="h-16 flex items-center px-6 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-3 text-white">
           <div className="p-1.5 bg-indigo-600 rounded-lg shadow-sm">
             <Hexagon size={18} className="text-white fill-white/20" />
@@ -240,6 +114,14 @@ export const Sidebar = () => {
             Productivity Tracker
           </span>
         </div>
+      </div> */}
+
+      <div className="h-18 flex items-center px-6 border-b border-white/10 shrink-0">
+        <img
+          src={logo}
+          alt="Productivity Tracker"
+          className="h-[4.5rem] w-auto object-contain"
+        />
       </div>
 
       {/* Navigation Links */}

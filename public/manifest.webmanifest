@@ -1,0 +1,22 @@
+{
+  "name": "Productivity Tracker",
+  "short_name": "Tracker",
+  "description": "Modern SaaS Productivity Tracking Platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#5B5CEB",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

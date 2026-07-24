@@ -4,6 +4,7 @@ import * as z from "zod";
 import { useNavigate, Navigate, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Hexagon, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import logo from "../../public/img1.png"; // Update the path
 
 import { useAuth } from "../hooks/useAuth";
 import { cn } from "../utils/cn";
@@ -44,20 +45,18 @@ export default function Login() {
       {/* LEFT FORM PANEL */}
       <div className="flex-1 flex flex-col justify-center px-6 py-12 sm:px-12 lg:px-20 xl:px-24">
         <div className="mx-auto w-full max-w-sm lg:max-w-md">
-          {/* Brand/Logo */}
-          <div className="flex items-center gap-3 mb-10">
-            <div className="p-2 bg-indigo-600 rounded-xl shadow-sm">
-              <Hexagon size={24} className="text-white fill-white/20" />
-            </div>
-            <span className="font-extrabold text-xl tracking-tight text-slate-900">
-              Ticket Tracker
-            </span>
+          <div className="flex items-center  mb-10">
+            <img
+              src={logo}
+              alt="Productivity Tracker"
+              className="h-14 w-auto object-contain"
+            />
           </div>
 
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight leading-tight mb-2">
             Log in to your account
           </h2>
-          <p className="text-sm font-medium text-slate-500 mb-8">
+          {/* <p className="text-sm font-medium text-slate-500 mb-8">
             Don't have an account?{" "}
             <Link
               to="/register"
@@ -65,7 +64,7 @@ export default function Login() {
             >
               Sign up today
             </Link>
-          </p>
+          </p> */}
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             {/* Email Input */}

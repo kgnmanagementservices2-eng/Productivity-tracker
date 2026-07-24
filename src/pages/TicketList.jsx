@@ -58,7 +58,7 @@ export default function TicketList() {
   const [totalPages, setTotalPages] = useState(1);
   const limit = 20;
 
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const socket = useSocket();
   const navigate = useNavigate();
 
@@ -133,8 +133,17 @@ export default function TicketList() {
   };
 
   useEffect(() => {
+    if (loading || !user) return;
     fetchTickets(page);
-  }, [page, statusFilter, priorityFilter, departmentFilter, assigneeFilter]);
+  }, [
+    user,
+    loading,
+    page,
+    statusFilter,
+    priorityFilter,
+    departmentFilter,
+    assigneeFilter,
+  ]);
 
   // Handle Socket Events
   useEffect(() => {
@@ -500,15 +509,19 @@ export default function TicketList() {
                 "GLOBAL_ADMIN",
                 "CEO",
                 "BACK_OFFICE_MANAGER",
+                "BACK_OFFICE_MEMBER",
               ].includes(user?.role) && (
                 <Button
                   onClick={() => setIsCreateModalOpen(true)}
                   className="h-11 px-5 shadow-sm rounded-lg whitespace-nowrap bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 shrink-0"
                 >
                   <Plus size={16} className="mr-2 text-slate-400" />
-                  {["GLOBAL_ADMIN", "CEO", "BACK_OFFICE_MANAGER"].includes(
-                    user?.role,
-                  )
+                  {[
+                    "GLOBAL_ADMIN",
+                    "CEO",
+                    "BACK_OFFICE_MANAGER",
+                    "BACK_OFFICE_MEMBER",
+                  ].includes(user?.role)
                     ? "Assign Task"
                     : "New Ticket"}
                 </Button>
