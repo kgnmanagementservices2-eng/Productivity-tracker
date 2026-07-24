@@ -1,213 +1,3 @@
-// /* eslint-disable react-hooks/set-state-in-effect */
-// /* eslint-disable react-refresh/only-export-components */
-// import { createContext, useContext, useEffect, useState } from "react";
-// import { io } from "socket.io-client";
-// import toast from "react-hot-toast";
-// import { useNavigate } from "react-router-dom";
-// import { useAuth } from "../hooks/useAuth";
-
-// const SocketContext = createContext();
-// const OnlineUsersContext = createContext({}); // 🟢 Default to an empty object now
-
-// export const useSocket = () => useContext(SocketContext);
-// export const useOnlineUsers = () => useContext(OnlineUsersContext);
-
-// export const SocketProvider = ({ children }) => {
-//   const { user, loading, logout } = useAuth();
-//   const [socket, setSocket] = useState(null);
-//   const [userStatuses, setUserStatuses] = useState({}); // 🟢 Store statuses here
-//   const navigate = useNavigate();
-
-//   useEffect(() => {
-//     if (!loading && user) {
-//       const newSocket = io("/", {
-//         withCredentials: true,
-//         transports: ["websocket", "polling"], // Allows fallback if direct WS is aborted
-//         reconnection: true, // Automatically reconnect if dropped
-//         reconnectionAttempts: 5, // Try 5 times before giving up
-//         reconnectionDelay: 1000, // Wait 1 second between attempts
-//       });
-//       // ========================================================
-//       // 🟢 LIVE PRESENCE LISTENERS
-//       // ========================================================
-//       newSocket.on("online_users_list", (statusesObj) => {
-//         setUserStatuses(statusesObj);
-//       });
-
-//       newSocket.on("user_status_change", ({ userId, status }) => {
-//         setUserStatuses((prev) => {
-//           const updatedState = { ...prev };
-//           if (status === "offline") {
-//             delete updatedState[String(userId)];
-//           } else {
-//             updatedState[String(userId)] = status;
-//           }
-//           return updatedState;
-//         });
-//       });
-
-//       // 🟢 THE TAB VISIBILITY DETECTOR
-//       const handleVisibilityChange = () => {
-//         if (document.hidden) {
-//           newSocket.emit("set_status", "away"); // User minimized tab or switched windows
-//         } else {
-//           newSocket.emit("set_status", "online"); // User came back
-//         }
-//       };
-
-//       document.addEventListener("visibilitychange", handleVisibilityChange);
-
-//       // ========================================================
-//       // MULTI-DEVICE KICKOUT LISTENER
-//       // ========================================================
-//       newSocket.on("force_logout", (data) => {
-//         alert(data.message);
-//         if (logout) logout();
-//         newSocket.disconnect();
-//         navigate("/login");
-//       });
-
-//       newSocket.on("new_ticket_assigned", (data) => {
-//         toast.success(data.message || "New ticket assigned to you!", {
-//           icon: "🎫",
-//           duration: 6000,
-//         });
-//       });
-
-//       newSocket.on("ticket_reassigned_to_you", (data) => {
-//         toast.success(
-//           data.message || "A ticket was manually assigned to you.",
-//           { icon: "🔄", duration: 6000 },
-//         );
-//       });
-
-//       newSocket.on("incoming_huddle", (data) => {
-//         toast(
-//           (t) => (
-//             <div className="flex flex-col gap-3">
-//               <span className="font-bold text-slate-900">{data.message}</span>
-//               <p className="text-sm text-slate-500">
-//                 A user is waiting for you in the voice huddle.
-//               </p>
-//               <div className="flex gap-2 mt-1">
-//                 <button
-//                   onClick={() => {
-//                     toast.dismiss(t.id);
-//                     navigate(`/tickets/${data.ticketId}/huddle`);
-//                   }}
-//                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-semibold transition-colors flex-1"
-//                 >
-//                   Accept Call
-//                 </button>
-//                 <button
-//                   onClick={() => toast.dismiss(t.id)}
-//                   className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-2 rounded-md text-sm font-semibold transition-colors flex-1"
-//                 >
-//                   Decline
-//                 </button>
-//               </div>
-//             </div>
-//           ),
-//           { duration: 30000, icon: "☎️", style: { minWidth: "300px" } },
-//         );
-//       });
-
-//       newSocket.on("new_ticket_message", (data) => {
-//         const currentUserId = String(user?.id || user?.userId);
-//         const userRole = user?.role;
-
-//         if (String(data.sender_id) === currentUserId) return;
-
-//         const isCreator = currentUserId === String(data.ticket_creator_id);
-//         const isAssignee = currentUserId === String(data.ticket_assignee_id);
-//         const isAdmin =
-//           userRole === "GLOBAL_ADMIN" || userRole === "BACK_OFFICE_MANAGER";
-
-//         if (isCreator || isAssignee || isAdmin) {
-//           const currentPath = window.location.pathname;
-
-//           if (!currentPath.includes(`/tickets/${data.ticket_id}`)) {
-//             toast(
-//               (t) => (
-//                 <div
-//                   className="cursor-pointer flex flex-col gap-1"
-//                   onClick={() => {
-//                     toast.dismiss(t.id);
-//                     navigate(`/tickets/${data.ticket_id}`);
-//                   }}
-//                 >
-//                   <span className="font-bold text-slate-900 text-sm flex items-center gap-2">
-//                     💬 New Message from {data.sender_name || "Support"}
-//                   </span>
-//                   <p className="text-xs text-slate-500 truncate max-w-[200px]">
-//                     {data.message ? data.message : "📎 Sent an attachment"}
-//                   </p>
-//                 </div>
-//               ),
-//               {
-//                 duration: 5000,
-//                 position: "top-right",
-//                 style: { borderLeft: "4px solid #4f46e5" },
-//               },
-//             );
-//           }
-//         }
-//       });
-
-//       newSocket.on("new_group_message", (data) => {
-//         const currentUserId = user?.id || user?.userId;
-//         if (String(data.sender_id) !== String(currentUserId)) {
-//           const currentPath = window.location.pathname;
-//           if (!currentPath.includes("/groups")) {
-//             toast(
-//               (t) => (
-//                 <div
-//                   className="cursor-pointer flex flex-col gap-1"
-//                   onClick={() => {
-//                     toast.dismiss(t.id);
-//                     navigate(`/groups`);
-//                   }}
-//                 >
-//                   <span className="font-bold text-slate-900 text-sm flex items-center gap-2">
-//                     👥 Group Message from {data.sender_name || "Team"}
-//                   </span>
-//                   <p className="text-xs text-slate-500 truncate max-w-[200px]">
-//                     {data.message ? data.message : "📎 Sent an attachment"}
-//                   </p>
-//                 </div>
-//               ),
-//               {
-//                 duration: 5000,
-//                 position: "top-right",
-//                 style: { borderLeft: "4px solid #008069" },
-//               },
-//             );
-//           }
-//         }
-//       });
-
-//       setSocket(newSocket);
-
-//       return () => {
-//         document.removeEventListener(
-//           "visibilitychange",
-//           handleVisibilityChange,
-//         ); // Clean up the listener
-//         newSocket.disconnect();
-//       };
-//     }
-//   }, [user, loading, navigate, logout]);
-
-//   return (
-//     <SocketContext.Provider value={socket}>
-//       <OnlineUsersContext.Provider value={userStatuses}>
-//         {children}
-//       </OnlineUsersContext.Provider>
-//     </SocketContext.Provider>
-//   );
-// };
-/* eslint-disable react-hooks/set-state-in-effect */
-/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState } from "react";
 import { io } from "socket.io-client";
 import toast from "react-hot-toast";
@@ -215,13 +5,19 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 const SocketContext = createContext();
-const OnlineUsersContext = createContext({}); // Default to an empty object
+const OnlineUsersContext = createContext({});
 
 export const useSocket = () => useContext(SocketContext);
 export const useOnlineUsers = () => useContext(OnlineUsersContext);
 
-// Dynamic Socket URL setup (Uses VITE_SOCKET_URL in production, fallback to origin/relative dev proxy)
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
+const getSocketUrl = () => {
+  if (import.meta.env.VITE_SOCKET_URL) return import.meta.env.VITE_SOCKET_URL;
+  if (import.meta.env.VITE_API_URL)
+    return import.meta.env.VITE_API_URL.replace(/\/api$/, "");
+  return window.location.origin;
+};
+
+const SOCKET_URL = getSocketUrl();
 
 export const SocketProvider = ({ children }) => {
   const { user, loading, logout } = useAuth();
@@ -229,12 +25,14 @@ export const SocketProvider = ({ children }) => {
   const [userStatuses, setUserStatuses] = useState({});
   const navigate = useNavigate();
 
+  // Safely extract a primitive ID so object mutations don't trigger a reconnect
+  const userId = user?.id || user?.userId;
+
   useEffect(() => {
-    if (!loading && user) {
-      // Initialize production-ready Socket connection
+    if (!loading && userId) {
       const newSocket = io(SOCKET_URL, {
         withCredentials: true,
-        transports: ["websocket", "polling"], // Keeps WebSocket primary with polling fallback
+        transports: ["websocket", "polling"],
         reconnection: true,
         reconnectionAttempts: 10,
         reconnectionDelay: 1000,
@@ -242,39 +40,43 @@ export const SocketProvider = ({ children }) => {
         timeout: 20000,
       });
 
-      // ========================================================
-      // 🟢 LIVE PRESENCE LISTENERS
-      // ========================================================
+      // 🟢 ERROR LOGGING (Crucial for production debugging)
+      newSocket.on("connect_error", (err) => {
+        console.warn(`Socket connection error: ${err.message}`);
+      });
+
       newSocket.on("online_users_list", (statusesObj) => {
         setUserStatuses(statusesObj);
       });
 
-      newSocket.on("user_status_change", ({ userId, status }) => {
-        setUserStatuses((prev) => {
-          const updatedState = { ...prev };
-          if (status === "offline") {
-            delete updatedState[String(userId)];
-          } else {
-            updatedState[String(userId)] = status;
-          }
-          return updatedState;
-        });
-      });
+      newSocket.on(
+        "user_status_change",
+        ({ userId: changedUserId, status }) => {
+          setUserStatuses((prev) => {
+            const updatedState = { ...prev };
+            if (status === "offline") {
+              delete updatedState[String(changedUserId)];
+            } else {
+              updatedState[String(changedUserId)] = status;
+            }
+            return updatedState;
+          });
+        },
+      );
 
-      // 🟢 THE TAB VISIBILITY DETECTOR
+      // 🟢 GUARDED VISIBILITY DETECTOR
       const handleVisibilityChange = () => {
+        if (!newSocket.connected) return; // Prevent emitting if disconnected
+
         if (document.hidden) {
-          newSocket.emit("set_status", "away"); // User minimized tab or switched windows
+          newSocket.emit("set_status", "away");
         } else {
-          newSocket.emit("set_status", "online"); // User came back
+          newSocket.emit("set_status", "online");
         }
       };
 
       document.addEventListener("visibilitychange", handleVisibilityChange);
 
-      // ========================================================
-      // MULTI-DEVICE KICKOUT LISTENER
-      // ========================================================
       newSocket.on("force_logout", (data) => {
         toast.error(data.message || "Session terminated from another device.", {
           duration: 5000,
@@ -330,7 +132,7 @@ export const SocketProvider = ({ children }) => {
       });
 
       newSocket.on("new_ticket_message", (data) => {
-        const currentUserId = String(user?.id || user?.userId);
+        const currentUserId = String(userId);
         const userRole = user?.role;
 
         if (String(data.sender_id) === currentUserId) return;
@@ -372,8 +174,8 @@ export const SocketProvider = ({ children }) => {
       });
 
       newSocket.on("new_group_message", (data) => {
-        const currentUserId = user?.id || user?.userId;
-        if (String(data.sender_id) !== String(currentUserId)) {
+        const currentUserId = String(userId);
+        if (String(data.sender_id) !== currentUserId) {
           const currentPath = window.location.pathname;
           if (!currentPath.includes("/groups")) {
             toast(
@@ -413,13 +215,15 @@ export const SocketProvider = ({ children }) => {
         newSocket.disconnect();
       };
     } else {
-      // Cleanup socket if user state is cleared (logout)
       setSocket((prevSocket) => {
         if (prevSocket) prevSocket.disconnect();
         return null;
       });
     }
-  }, [user, loading, navigate, logout]);
+
+    // 🔥 Depending only on userId prevents object-mutation reconnects
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, loading]);
 
   return (
     <SocketContext.Provider value={socket}>
