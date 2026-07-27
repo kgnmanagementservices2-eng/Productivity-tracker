@@ -472,6 +472,8 @@ export default function HuddleRoom() {
                                         day: "numeric",
                                         hour: "numeric",
                                         minute: "numeric",
+                                        timeZone: "America/Chicago",
+                                        hour12: true,
                                       }).format(new Date(log.started_at))}
                                     </span>
                                   </div>

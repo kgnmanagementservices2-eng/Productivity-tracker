@@ -123,7 +123,8 @@ export const RecentActivityTable = ({ tickets }) => {
                       day: "numeric",
                       hour: "numeric",
                       minute: "numeric",
-                      timeZone: "America/Chicago", // Forces the UI to evaluate and print strictly in Central Time
+                      timeZone: "America/Chicago",
+                      hour12: true,
                     }).format(new Date(ticket.created_at))}
                   </td>
                   <td className="px-6 py-4 text-right">

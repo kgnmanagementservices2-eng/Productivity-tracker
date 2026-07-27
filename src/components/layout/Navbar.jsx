@@ -163,7 +163,8 @@ export const Navbar = () => {
                 weekday: "long",
                 month: "short",
                 day: "numeric",
-                timeZone: "America/Chicago", // Forces the UI to evaluate and print strictly in Central Time
+                timeZone: "America/Chicago",
+                hour12: true, // Forces the UI to evaluate and print strictly in Central Time
               }).format(new Date())}
             </p>
           </div>
@@ -257,7 +258,8 @@ export const Navbar = () => {
                                 day: "numeric",
                                 hour: "numeric",
                                 minute: "numeric",
-                                timeZone: "America/Chicago", // Forces the UI to evaluate and print strictly in Central Time
+                                timeZone: "America/Chicago",
+                                hour12: true,
                               }).format(new Date(notif.created_at))}
                             </p>
                           </div>

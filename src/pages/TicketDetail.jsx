@@ -851,6 +851,8 @@ export default function TicketDetail() {
                               day: "numeric",
                               hour: "2-digit",
                               minute: "2-digit",
+                              timeZone: "America/Chicago",
+                              hour12: true,
                             })}
                             {step.actor_name && ` • ${step.actor_name}`}
                           </span>
@@ -914,6 +916,7 @@ export default function TicketDetail() {
                                       hour: "numeric",
                                       minute: "numeric",
                                       timeZone: "America/Chicago",
+                                      hour12: true,
                                     }).format(new Date(log.started_at))
                                   : ""}
                               </span>

@@ -19,9 +19,9 @@ import {
   Star,
   Eye,
   CalendarClock,
-  Building2, // 🟢 Added Icon
-  Users, // 🟢 Added Icon
-  ChevronDown, // 🟢 Added Icon
+  Building2,
+  Users,
+  ChevronDown,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -35,6 +35,30 @@ import { cn } from "../utils/cn";
 import { CreateTicketModal } from "../components/tickets/CreateTicketModal";
 import { ReassignTicketModal } from "../components/tickets/ReassignTicketModal";
 
+// 🟢 NEW: Bulletproof Date Parser to prevent "Invalid Date" crashes across browsers
+// 🟢 NEW: Bulletproof Date Parser to prevent "Invalid Date" crashes and force UTC tracking
+const parseSafeDate = (dateVal) => {
+  if (!dateVal) return new Date();
+
+  let safeStr = dateVal;
+
+  if (typeof safeStr === "string") {
+    // Safari fails on "YYYY-MM-DD HH:MM:SS". It needs a "T" in between.
+    if (!safeStr.includes("T")) {
+      safeStr = safeStr.replace(" ", "T");
+    }
+
+    // 🟢 FORCE UTC: If the timestamp lacks a timezone identifier (Z, +, or -), append Z
+    // This stops the browser from assuming the DB time is local system time.
+    if (!safeStr.endsWith("Z") && !safeStr.match(/[+-]\d{2}:\d{2}$/)) {
+      safeStr += "Z";
+    }
+  }
+
+  const parsed = new Date(safeStr);
+  return isNaN(parsed) ? new Date() : parsed;
+};
+
 export default function TicketList() {
   const [tickets, setTickets] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,7 +71,7 @@ export default function TicketList() {
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [assigneeFilter, setAssigneeFilter] = useState("");
   const [departmentsList, setDepartmentsList] = useState([]);
-  const [allMembersList, setAllMembersList] = useState([]); // Store all members
+  const [allMembersList, setAllMembersList] = useState([]);
 
   // Modal States
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -62,10 +86,10 @@ export default function TicketList() {
   const socket = useSocket();
   const navigate = useNavigate();
 
-  // 🟢 1. Initialize Default Settings for Managers
+  // Initialize Default Settings for Managers
   useEffect(() => {
     if (user?.role === "BACK_OFFICE_MANAGER" && user?.department_id) {
-      setDepartmentFilter(user.department_id); // Default to their own department
+      setDepartmentFilter(user.department_id);
     }
   }, [user]);
 
@@ -157,7 +181,6 @@ export default function TicketList() {
     };
   }, [socket, page]);
 
-  // Client-Side Search Filter
   const filteredTickets = tickets.filter(
     (t) =>
       t.category_level_1.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -165,12 +188,8 @@ export default function TicketList() {
       t.id.includes(searchTerm),
   );
 
-  // 🟢 FIX: Strictly enforce department matching
   const availableMembers = allMembersList.filter((m) => {
-    // If no department is selected, show everyone
     if (!departmentFilter) return true;
-
-    // Otherwise, strictly mandate that their department matches the filter
     return String(m.department_id) === String(departmentFilter);
   });
 
@@ -182,7 +201,6 @@ export default function TicketList() {
   const clearFilters = () => {
     setStatusFilter("");
     setPriorityFilter("");
-    // Only clear department if they are an admin
     if (["GLOBAL_ADMIN", "CEO"].includes(user?.role)) {
       setDepartmentFilter("");
     }
@@ -318,14 +336,63 @@ export default function TicketList() {
     );
   };
 
-  const renderTicketAge = (ticket) => {
-    const start = new Date(ticket.created_at);
-    const end =
-      ticket.status === "CLOSED" || ticket.status === "RESOLVED"
-        ? new Date(ticket.updated_at || new Date())
-        : new Date();
+  // const renderTicketAge = (ticket) => {
+  //   // 🟢 SECURE DATE PARSING
+  //   const start = parseSafeDate(ticket.created_at);
+  //   const end =
+  //     ticket.status === "CLOSED" || ticket.status === "RESOLVED"
+  //       ? parseSafeDate(ticket.updated_at || new Date())
+  //       : new Date();
 
-    const diffMs = end - start;
+  //   // 🟢 CLOCK DRIFT PROTECTION: Prevent negative milliseconds if AWS and local computer are out of sync by a few seconds
+  //   const diffMs = Math.max(0, end - start);
+
+  //   const diffHrs = diffMs / (1000 * 60 * 60);
+  //   const displayHrs = Math.floor(diffHrs);
+  //   const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+  //   let timeText = "";
+  //   if (displayHrs > 24)
+  //     timeText = `${Math.floor(displayHrs / 24)}d ${displayHrs % 24}h`;
+  //   else if (displayHrs > 0) timeText = `${displayHrs}h ${diffMins}m`;
+  //   else timeText = `${diffMins}m`;
+
+  //   const targetHours = 12;
+  //   const progressPercent = Math.min(
+  //     (Math.max(0, diffHrs) / targetHours) * 100,
+  //     100,
+  //   );
+
+  //   let barColor = "bg-indigo-400";
+  //   if (ticket.status === "CLOSED" || ticket.status === "RESOLVED")
+  //     barColor = "bg-emerald-400";
+  //   else if (diffHrs >= 12) barColor = "bg-red-500";
+  //   else if (diffHrs >= 6) barColor = "bg-amber-400";
+
+  //   return (
+  //     <div className="flex flex-col gap-1.5 w-24">
+  //       <span className="font-bold text-slate-800 text-sm">{timeText}</span>
+  //       <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+  //         <div
+  //           className={`h-full ${barColor} rounded-full`}
+  //           style={{ width: `${progressPercent}%` }}
+  //         ></div>
+  //       </div>
+  //     </div>
+  //   );
+  // };
+
+  const renderTicketAge = (ticket) => {
+    // 🟢 SECURE DATE PARSING
+    const start = parseSafeDate(ticket.created_at);
+    const isClosed = ticket.status === "CLOSED" || ticket.status === "RESOLVED";
+    const end = isClosed
+      ? parseSafeDate(ticket.updated_at || new Date())
+      : new Date();
+
+    // 🟢 CLOCK DRIFT PROTECTION: Prevent negative milliseconds
+    const diffMs = Math.max(0, end - start);
+
     const diffHrs = diffMs / (1000 * 60 * 60);
     const displayHrs = Math.floor(diffHrs);
     const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -336,28 +403,89 @@ export default function TicketList() {
     else if (displayHrs > 0) timeText = `${displayHrs}h ${diffMins}m`;
     else timeText = `${diffMins}m`;
 
-    const targetHours = 12;
-    const progressPercent = Math.min((diffHrs / targetHours) * 100, 100);
+    // 🟢 IF RESOLVED/CLOSED: Show completed bar with a resolution stamp
+    if (isClosed) {
+      const formattedDate = new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: "America/Chicago",
+        hour12: true,
+      }).format(end);
 
-    let barColor = "bg-indigo-400";
-    if (ticket.status === "CLOSED" || ticket.status === "RESOLVED")
-      barColor = "bg-emerald-400";
-    else if (diffHrs >= 12) barColor = "bg-red-500";
-    else if (diffHrs >= 6) barColor = "bg-amber-400";
+      return (
+        <div className="flex flex-col gap-1.5 w-28 group">
+          <div className="flex items-center justify-between pr-1">
+            <span className="font-extrabold text-emerald-600 text-[13px] tracking-tight">
+              {timeText}
+            </span>
+            {/* Completion Stamp Icon */}
+            <svg
+              className="w-3.5 h-3.5 text-emerald-500 drop-shadow-sm"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={3.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          </div>
+
+          {/* 100% Completed Progress Bar */}
+          <div className="h-1.5 w-full bg-emerald-100/80 rounded-full overflow-hidden shadow-inner">
+            <div className="h-full bg-emerald-500 rounded-full w-full"></div>
+          </div>
+
+          {/* Micro-Typography Date Stamp */}
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">
+            {formattedDate}
+          </span>
+        </div>
+      );
+    }
+
+    // 🟢 IF OPEN: Show the standard ticking age and dynamic progress bar (NO text)
+    const targetHours = 12;
+    const progressPercent = Math.min(
+      (Math.max(0, diffHrs) / targetHours) * 100,
+      100,
+    );
+
+    // Dynamic coloring for both the bar AND the track for a premium look
+    let barColor = "bg-indigo-500";
+    let trackColor = "bg-indigo-100";
+
+    if (diffHrs >= 12) {
+      barColor = "bg-red-500";
+      trackColor = "bg-red-100";
+    } else if (diffHrs >= 6) {
+      barColor = "bg-amber-500";
+      trackColor = "bg-amber-100";
+    }
 
     return (
-      <div className="flex flex-col gap-1.5 w-24">
-        <span className="font-bold text-slate-800 text-sm">{timeText}</span>
-        <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+      <div className="flex flex-col gap-1.5 w-28">
+        <span className="font-extrabold text-slate-700 text-[13px] tracking-tight">
+          {timeText}
+        </span>
+
+        {/* Dynamic Progress Bar */}
+        <div
+          className={`h-1.5 w-full ${trackColor} rounded-full overflow-hidden shadow-inner`}
+        >
           <div
-            className={`h-full ${barColor} rounded-full`}
+            className={`h-full ${barColor} rounded-full transition-all duration-500 ease-out`}
             style={{ width: `${progressPercent}%` }}
           ></div>
         </div>
       </div>
     );
   };
-
   const renderTAT = (ticket) => {
     if (!ticket.tat) {
       return (
@@ -367,7 +495,8 @@ export default function TicketList() {
       );
     }
 
-    const tatDate = new Date(ticket.tat);
+    // 🟢 SECURE DATE PARSING
+    const tatDate = parseSafeDate(ticket.tat);
     const isClosed = ticket.status === "CLOSED" || ticket.status === "RESOLVED";
     const isOverdue = !isClosed && new Date() > tatDate;
 
@@ -399,8 +528,9 @@ export default function TicketList() {
         >
           {new Intl.DateTimeFormat("en-US", {
             hour: "numeric",
-            minute: "numeric",
+            minute: "2-digit",
             timeZone: "America/Chicago",
+            hour12: true,
           }).format(tatDate)}
         </div>
         {isOverdue && (
@@ -415,8 +545,8 @@ export default function TicketList() {
   const getRowStyle = (ticket) => {
     if (ticket.status === "CLOSED" || ticket.status === "RESOLVED")
       return "border-l-4 border-l-transparent";
-    const hoursOpen =
-      (new Date() - new Date(ticket.created_at)) / (1000 * 60 * 60);
+    const start = parseSafeDate(ticket.created_at);
+    const hoursOpen = (new Date() - start) / (1000 * 60 * 60);
     if (hoursOpen >= 12) return "border-l-4 border-l-red-500";
     if (hoursOpen >= 6) return "border-l-4 border-l-amber-400";
     return "border-l-4 border-l-indigo-500";
@@ -424,7 +554,6 @@ export default function TicketList() {
 
   return (
     <div className="space-y-6">
-      {/* HEADER SECTION */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
@@ -435,7 +564,6 @@ export default function TicketList() {
           </p>
         </div>
 
-        {/* Priority Legend */}
         <div className="flex items-center gap-6 bg-white px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm">
           <div className="flex flex-col items-center gap-1">
             <div className="flex items-center gap-1 text-red-600">
@@ -487,7 +615,6 @@ export default function TicketList() {
 
       <Card className="border-slate-200/80 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.05)] rounded-2xl overflow-hidden">
         <CardContent className="p-0 flex flex-col min-h-[500px]">
-          {/* FILTER BAR */}
           <div className="p-4 bg-slate-100 border-b border-slate-200 flex flex-col md:flex-row gap-3 justify-between items-center">
             <div className="relative w-full max-w-sm shrink-0">
               <Search
@@ -527,7 +654,6 @@ export default function TicketList() {
                 </Button>
               )}
 
-              {/* 🟢 3. NEW: Icon-Based Department Filter (Global Admins & CEO Only) */}
               {["GLOBAL_ADMIN", "CEO"].includes(user?.role) && (
                 <div className="relative shrink-0">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -537,7 +663,7 @@ export default function TicketList() {
                     value={departmentFilter}
                     onChange={(e) => {
                       setDepartmentFilter(e.target.value);
-                      setAssigneeFilter(""); // Reset assignee when dept changes
+                      setAssigneeFilter("");
                       setPage(1);
                     }}
                     className="h-11 w-44 appearance-none pl-9 pr-8 rounded-lg border border-slate-300/80 bg-white text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer truncate"
@@ -556,8 +682,6 @@ export default function TicketList() {
                 </div>
               )}
 
-              {/* 🟢 4. NEW: Icon-Based Assignee Filter */}
-              {/* 🟢 Icon-Based Assignee Filter */}
               {["GLOBAL_ADMIN", "CEO", "BACK_OFFICE_MANAGER"].includes(
                 user?.role,
               ) && (
@@ -588,10 +712,7 @@ export default function TicketList() {
                         ? "Select Dept..."
                         : "All Members"}
                     </option>
-
-                    {/* 🟢 FIX 2: Added crucial filter to find tickets with no owner */}
                     <option value="UNASSIGNED">Unassigned (Queue)</option>
-
                     {availableMembers.map((member) => (
                       <option key={member.id} value={member.id}>
                         {member.name}
@@ -632,7 +753,6 @@ export default function TicketList() {
             </div>
           </div>
 
-          {/* TABLE DATA */}
           <div className="overflow-x-auto flex-1 bg-white">
             <table className="w-full text-sm text-left">
               <thead className="bg-slate-50/80 text-slate-700 text-xs font-extrabold border-b border-slate-200 tracking-wider">
@@ -641,7 +761,7 @@ export default function TicketList() {
                   <th className="px-6 py-4">Ticket ID</th>
                   <th className="px-6 py-4">Category</th>
                   <th className="px-6 py-4">Priority</th>
-                  <th className="px-6 py-4">Ticket Age</th>
+                  <th className="px-6 py-4">Age / Resolved</th>{" "}
                   <th className="px-6 py-4">Created At</th>
                   <th className="px-6 py-4">TAT (Deadline)</th>
                   <th className="px-6 py-4">Assigned To</th>
@@ -711,6 +831,8 @@ export default function TicketList() {
                       <td className="px-6 py-5 align-middle">
                         {renderTicketAge(ticket)}
                       </td>
+
+                      {/* 🟢 SECURE DATE RENDERING */}
                       <td className="px-6 py-5 align-middle text-slate-600 font-medium text-xs">
                         <div className="flex flex-col">
                           <span>
@@ -718,17 +840,19 @@ export default function TicketList() {
                               month: "short",
                               day: "numeric",
                               timeZone: "America/Chicago",
-                            }).format(new Date(ticket.created_at))}
+                            }).format(parseSafeDate(ticket.created_at))}
                           </span>
                           <span className="text-slate-400">
                             {new Intl.DateTimeFormat("en-US", {
                               hour: "numeric",
-                              minute: "numeric",
+                              minute: "2-digit",
                               timeZone: "America/Chicago",
-                            }).format(new Date(ticket.created_at))}
+                              hour12: true,
+                            }).format(parseSafeDate(ticket.created_at))}
                           </span>
                         </div>
                       </td>
+
                       <td className="px-6 py-5 align-middle">
                         {renderTAT(ticket)}
                       </td>
@@ -782,7 +906,6 @@ export default function TicketList() {
             </table>
           </div>
 
-          {/* Pagination Footer */}
           <div className="p-4 border-t border-slate-200 flex items-center justify-between bg-white rounded-b-xl">
             <span className="text-sm text-slate-500 font-medium">
               Showing Page {page} of {totalPages || 1}

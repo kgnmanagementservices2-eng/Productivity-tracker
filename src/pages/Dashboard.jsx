@@ -322,6 +322,8 @@ export default function Dashboard() {
                                     month: "short",
                                     day: "numeric",
                                     year: "numeric",
+                                    timeZone: "America/Chicago",
+                                    hour12: true,
                                   },
                                 )}
                               </td>
@@ -404,6 +406,8 @@ export default function Dashboard() {
                                     month: "short",
                                     day: "numeric",
                                     year: "numeric",
+                                    timeZone: "America/Chicago",
+                                    hour12: true,
                                   },
                                 )}
                               </td>

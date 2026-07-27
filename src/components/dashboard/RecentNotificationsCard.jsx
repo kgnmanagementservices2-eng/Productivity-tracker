@@ -46,6 +46,8 @@ export const RecentNotificationsCard = () => {
       day: "numeric",
       hour: "numeric",
       minute: "numeric",
+      timeZone: "America/Chicago",
+      hour12: true,
     }).format(new Date(dateString));
   };
 

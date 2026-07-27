@@ -134,7 +134,8 @@ export default function CallHistory() {
                             day: "numeric",
                             hour: "numeric",
                             minute: "numeric",
-                            timeZone: "America/Chicago", // Forces the UI to evaluate and print strictly in Central Time
+                            timeZone: "America/Chicago",
+                            hour12: true,
                           }).format(new Date(log.started_at))}
                         </p>
                       </div>

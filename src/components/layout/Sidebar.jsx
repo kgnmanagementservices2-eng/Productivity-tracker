@@ -1,3 +1,5 @@
+/* eslint-disable no-unused-vars */
+import { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { cn } from "../../utils/cn";
@@ -11,13 +13,76 @@ import {
   MessageSquare,
   FolderTree,
   LogOut,
-  Hexagon, // Using as a placeholder for a modern brand logo
+  Hexagon,
+  Clock, // Imported Clock icon for the live timer
 } from "lucide-react";
 
 export const Sidebar = () => {
-  const { user, logout } = useAuth(); // Assuming your useAuth hook has a logout method
+  const { user, logout } = useAuth();
 
-  // The Master Navigation Configuration - Added 'group' property for visual hierarchy
+  // ==========================================
+  // 🟢 TRUE CST LIVE CLOCK LOGIC
+  // ==========================================
+  const [time, setTime] = useState(new Date());
+  const [timeOffset, setTimeOffset] = useState(0);
+
+  // 1. Fetch True Server Time exactly once on mount
+  useEffect(() => {
+    const fetchTrueTime = async () => {
+      try {
+        const response = await fetch(
+          "http://worldtimeapi.org/api/timezone/America/Chicago",
+        );
+        const data = await response.json();
+
+        // Convert the exact server time to a Unix Timestamp
+        const serverTime = new Date(data.datetime).getTime();
+
+        // Get the user's current computer time
+        const localTime = Date.now();
+
+        // Calculate the drift (How far off is their computer?)
+        const drift = serverTime - localTime;
+        setTimeOffset(drift);
+      } catch (error) {
+        console.error(
+          "Failed to sync with time server. Falling back to local clock.",
+        );
+      }
+    };
+
+    fetchTrueTime();
+  }, []);
+
+  // 2. Tick the clock locally, but apply the true offset
+  useEffect(() => {
+    const timerId = setInterval(() => {
+      // Date.now() + timeOffset guarantees it matches the True Server Time
+      setTime(new Date(Date.now() + timeOffset));
+    }, 1000);
+
+    return () => clearInterval(timerId); // Cleanup on unmount
+  }, [timeOffset]);
+
+  // 3. Format the time forcing CST (America/Chicago)
+  const formattedTime = time.toLocaleTimeString("en-US", {
+    timeZone: "America/Chicago",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+
+  const formattedDate = time.toLocaleDateString("en-US", {
+    timeZone: "America/Chicago",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+
+  // ==========================================
+  // NAVIGATION CONFIGURATION
+  // ==========================================
   const navItems = [
     {
       name: "Dashboard",
@@ -105,17 +170,6 @@ export const Sidebar = () => {
   return (
     <aside className="w-64 flex flex-col h-screen fixed left-0 top-0 bg-[var(--tenant-primary,#020617)] border-r border-white/10 z-50">
       {/* Brand Logo Area */}
-      {/* <div className="h-16 flex items-center px-6 border-b border-white/10 shrink-0">
-        <div className="flex items-center gap-3 text-white">
-          <div className="p-1.5 bg-indigo-600 rounded-lg shadow-sm">
-            <Hexagon size={18} className="text-white fill-white/20" />
-          </div>
-          <span className="font-bold text-[15px] tracking-wide">
-            Productivity Tracker
-          </span>
-        </div>
-      </div> */}
-
       <div className="h-18 flex items-center px-6 border-b border-white/10 shrink-0">
         <img
           src={logo}
@@ -151,7 +205,7 @@ export const Sidebar = () => {
                 >
                   {({ isActive }) => (
                     <>
-                      {/* Premium Active Indicator (Linear/Vercel Style) */}
+                      {/* Premium Active Indicator */}
                       {isActive && (
                         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-indigo-500 rounded-r-full shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
                       )}
@@ -174,6 +228,23 @@ export const Sidebar = () => {
           </div>
         ))}
       </nav>
+
+      {/* 🟢 True CST Live Clock Widget */}
+      <div className="px-4 pb-3 shrink-0">
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 shadow-inner">
+          <div className="text-indigo-400/80 bg-indigo-500/10 p-1.5 rounded-lg shrink-0">
+            <Clock size={16} className="animate-pulse" />
+          </div>
+          <div className="flex flex-col overflow-hidden">
+            <span className="text-[13px] font-mono font-bold text-slate-200 tabular-nums leading-tight tracking-tight truncate">
+              {formattedTime} CST
+            </span>
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-tight truncate mt-0.5">
+              {formattedDate}
+            </span>
+          </div>
+        </div>
+      </div>
 
       {/* User Profile Footer */}
       <div className="p-4 border-t border-white/10 shrink-0">
