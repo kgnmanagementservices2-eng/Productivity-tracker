@@ -222,12 +222,30 @@ export default function Groups() {
     } catch (error) {}
   };
 
-  const handleSendMessage = async (text, fileUrl, fileName) => {
+  const handleSendMessage = async (text, selectedFile) => {
     try {
+      let finalS3Url = null;
+      let finalFileName = null;
+
+      // 1. If a file is selected, upload it to S3 first
+      if (selectedFile) {
+        const formData = new FormData();
+        formData.append("file", selectedFile); // Must match multer's expected field name
+
+        const uploadRes = await api.post("/upload", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+
+        // Extract the AWS URL from your upload controller's response
+        finalS3Url = uploadRes.data.data.url;
+        finalFileName = selectedFile.name;
+      }
+
+      // 2. Send the database payload with the permanent S3 URL
       const res = await api.post(`/groups/${activeGroup.id}/messages`, {
         message: text,
-        attachmentUrl: fileUrl,
-        attachmentName: fileName,
+        attachmentUrl: finalS3Url, // Sending the AWS URL instead of local blob
+        attachmentName: finalFileName,
       });
 
       const newMsg = res.data.data;
@@ -245,7 +263,8 @@ export default function Groups() {
         100,
       );
     } catch (error) {
-      toast.error("Failed to send message");
+      console.error("Message send error:", error);
+      toast.error("Failed to send message or upload file");
     }
   };
 
