@@ -62,14 +62,28 @@ export const ChatArea = ({
 
   const handleSend = async (e) => {
     e.preventDefault();
-    if ((!newMessage.trim() && !selectedFile) || !activeGroup || isSending)
+
+    // Prevent sending if empty, missing group, or already sending
+    if ((!newMessage.trim() && !selectedFile) || !activeGroup || isSending) {
       return;
+    }
+
     setIsSending(true);
-    await onSendMessage(newMessage, selectedFile);
-    setNewMessage("");
-    setSelectedFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    setIsSending(false);
+
+    try {
+      // Pass the text and the raw File object to the parent handler
+      await onSendMessage(newMessage, selectedFile);
+
+      // Clear inputs only after a successful send
+      setNewMessage("");
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } finally {
+      // Ensure the loading state is ALWAYS removed, even on failure
+      setIsSending(false);
+    }
   };
 
   if (!activeGroup) {
