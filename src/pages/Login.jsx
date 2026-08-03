@@ -3,9 +3,17 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useNavigate, Navigate, Link } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Hexagon, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import {
+  Hexagon,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  Loader2,
+} from "lucide-react";
 import logo from "../../public/img1.png"; // Update the path
-
+import { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { cn } from "../utils/cn";
 
@@ -16,6 +24,7 @@ const loginSchema = z.object({
 
 export default function Login() {
   const { login, user, loading } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const {
@@ -96,13 +105,12 @@ export default function Login() {
               )}
             </div>
 
-            {/* Password Input */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                   Password
                 </label>
-                {/* Optional: Forgot password link */}
+
                 <a
                   href="#"
                   className="text-xs font-bold text-indigo-600 hover:text-indigo-500"
@@ -110,23 +118,35 @@ export default function Login() {
                   Forgot password?
                 </a>
               </div>
+
               <div className="relative">
                 <Lock
                   size={18}
                   className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
                 />
+
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   {...register("password")}
                   className={cn(
-                    "w-full h-12 pl-10 pr-4 rounded-xl border bg-slate-50/50 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all",
+                    "w-full h-12 pl-10 pr-11 rounded-xl border bg-slate-50/50 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all",
                     errors.password
                       ? "border-red-300 focus:border-red-500"
                       : "border-slate-200 focus:border-indigo-500",
                   )}
                 />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
+
               {errors.password && (
                 <p className="text-xs font-semibold text-red-500 mt-1">
                   {errors.password.message}

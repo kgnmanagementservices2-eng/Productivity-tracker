@@ -2,6 +2,7 @@
 /* eslint-disable no-unused-vars */
 import { useState, useEffect, useRef } from "react";
 import toast from "react-hot-toast";
+import axios from "axios"; // 🟢 Import raw axios for direct S3 uploads
 
 import api from "../services/api";
 import { useAuth } from "../hooks/useAuth";
@@ -20,13 +21,15 @@ export default function Groups() {
   const [activeGroup, setActiveGroup] = useState(null);
   const [availableUsers, setAvailableUsers] = useState([]);
 
-  // 🟢 NEW: Added Loading States
+  // Loading States
   const [isLoadingGroups, setIsLoadingGroups] = useState(true);
   const [isLoadingInitialMessages, setIsLoadingInitialMessages] =
     useState(false);
 
+  // 🟢 Upload Progress State
+  const [uploadProgress, setUploadProgress] = useState(0);
+
   const [messages, setMessages] = useState([]);
-  const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const messagesEndRef = useRef(null);
@@ -48,14 +51,14 @@ export default function Groups() {
   const MEMBERS_PER_PAGE = 10;
 
   const fetchMyGroups = async () => {
-    setIsLoadingGroups(true); // 🟢 Set loading to true
+    setIsLoadingGroups(true);
     try {
       const res = await api.get("/groups");
       setGroups(res.data.data);
     } catch (error) {
       toast.error("Failed to load groups");
     } finally {
-      setIsLoadingGroups(false); // 🟢 Turn off loader
+      setIsLoadingGroups(false);
     }
   };
 
@@ -63,22 +66,22 @@ export default function Groups() {
     fetchMyGroups();
   }, []);
 
+  // 🟢 1. Initial Load: No cursors needed, just get the latest 50
   useEffect(() => {
     if (!activeGroup) return;
+
     const fetchInitialMessages = async () => {
-      setIsLoadingInitialMessages(true); // 🟢 Set loading to true
+      setIsLoadingInitialMessages(true);
       try {
-        const res = await api.get(
-          `/groups/${activeGroup.id}/messages?page=1&limit=50`,
-        );
+        // Removed the page=1 parameter
+        const res = await api.get(`/groups/${activeGroup.id}/messages?limit=50`);
         setMessages(res.data.data);
         setHasMore(res.data.meta?.hasMore ?? false);
-        setPage(1);
         setTimeout(() => messagesEndRef.current?.scrollIntoView(), 100);
       } catch (error) {
         toast.error("Failed to load chat history");
       } finally {
-        setIsLoadingInitialMessages(false); // 🟢 Turn off loader
+        setIsLoadingInitialMessages(false);
       }
     };
 
@@ -88,20 +91,31 @@ export default function Groups() {
     setMemberSearchQuery("");
   }, [activeGroup]);
 
+
+  // 🟢 2. Scroll Load: Pass the timestamp and ID of the oldest message
   const handleScroll = async (e) => {
     const { scrollTop, scrollHeight } = e.target;
-    if (scrollTop === 0 && hasMore && !isLoadingMore) {
+
+    // Only trigger if we hit the top, have more to load, aren't already loading, AND have messages
+    if (scrollTop === 0 && hasMore && !isLoadingMore && messages.length > 0) {
       setIsLoadingMore(true);
       const previousScrollHeight = scrollHeight;
+
       try {
-        const nextPage = page + 1;
-        // 🟢 Pass Cursor here if you implemented cursor pagination in the backend
+        // The oldest message is always at index 0 because we sort ASC for the UI
+        const oldestMessage = messages[0];
+
+        // Pass both the timestamp and the ID to prevent skipping duplicate timestamps
         const res = await api.get(
-          `/groups/${activeGroup.id}/messages?page=${nextPage}&limit=50`,
+          `/groups/${activeGroup.id}/messages?limit=50&cursorTimestamp=${encodeURIComponent(
+            oldestMessage.created_at
+          )}&cursorId=${oldestMessage.id}`
         );
+
         setMessages((prev) => [...res.data.data, ...prev]);
         setHasMore(res.data.meta?.hasMore ?? false);
-        setPage(nextPage);
+
+        // Keep scroll position smooth so it doesn't snap to the top
         requestAnimationFrame(() => {
           if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop =
@@ -161,7 +175,6 @@ export default function Groups() {
   useEffect(() => {
     if (!socket) return;
 
-    // 🟢 1. Create a dedicated function to join the room
     const joinCurrentRoom = () => {
       if (activeGroup) {
         socket.emit("join_group", `group_${activeGroup.id}`);
@@ -169,16 +182,12 @@ export default function Groups() {
       }
     };
 
-    // Join immediately on load
     joinCurrentRoom();
-
-    // 🟢 2. THE FIX: If the socket silently drops and reconnects, force it to re-join!
     socket.on("connect", joinCurrentRoom);
 
     const handleNewMessage = (message) => {
       if (activeGroup && String(message.group_id) === String(activeGroup.id)) {
         setMessages((prev) => {
-          // Prevent duplicates if the socket fires twice during a reconnect
           if (prev.some((m) => m.id === message.id)) return prev;
           return [...prev, message];
         });
@@ -188,7 +197,7 @@ export default function Groups() {
         }, 50);
 
         if (String(message.sender_id) !== currentUserId) {
-          api.put(`/groups/${activeGroup.id}/read`).catch(() => {});
+          api.put(`/groups/${activeGroup.id}/read`).catch(() => { });
         }
       } else {
         setGroups((prevGroups) =>
@@ -204,7 +213,6 @@ export default function Groups() {
     socket.on("new_group_message", handleNewMessage);
 
     return () => {
-      // 🟢 3. Clean up the reconnect listener when leaving the page
       socket.off("connect", joinCurrentRoom);
       socket.off("new_group_message", handleNewMessage);
     };
@@ -219,7 +227,7 @@ export default function Groups() {
     );
     try {
       await api.put(`/groups/${group.id}/read`);
-    } catch (error) {}
+    } catch (error) { }
   };
 
   const handleSendMessage = async (text, selectedFile) => {
@@ -227,44 +235,69 @@ export default function Groups() {
       let finalS3Url = null;
       let finalFileName = null;
 
-      // 1. If a file is selected, upload it to S3 first
       if (selectedFile) {
-        const formData = new FormData();
-        formData.append("file", selectedFile); // Must match multer's expected field name
+        const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB in bytes
+        if (selectedFile.size > MAX_FILE_SIZE) {
+          toast.error("File is too large. Maximum size allowed is 25MB.");
+          return; // Stop the upload process immediately
+        }
 
-        const uploadRes = await api.post("/upload", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
+        setUploadProgress(1);
+
+
+        // 1. Request Presigned URL from Backend
+        const presignedRes = await api.post("/upload/presigned-url", {
+          fileName: selectedFile.name,
+          fileType: selectedFile.type || "application/octet-stream",
         });
 
-        // Extract the AWS URL from your upload controller's response
-        finalS3Url = uploadRes.data.data.url;
+        const { uploadUrl, fileUrl } = presignedRes.data.data;
+
+        // 2. Direct PUT request to S3 using raw axios
+        await axios.put(uploadUrl, selectedFile, {
+          headers: {
+            "Content-Type": selectedFile.type || "application/octet-stream",
+          },
+          onUploadProgress: (progressEvent) => {
+            if (progressEvent.total) {
+              const percentCompleted = Math.round(
+                (progressEvent.loaded * 100) / progressEvent.total
+              );
+              setUploadProgress(percentCompleted);
+            }
+          },
+        });
+
+        finalS3Url = fileUrl;
         finalFileName = selectedFile.name;
       }
 
-      // 2. Send the database payload with the permanent S3 URL
+      // 3. Post Message Payload to Database
       const res = await api.post(`/groups/${activeGroup.id}/messages`, {
         message: text,
-        attachmentUrl: finalS3Url, // Sending the AWS URL instead of local blob
+        attachmentUrl: finalS3Url,
         attachmentName: finalFileName,
       });
 
       const newMsg = res.data.data;
 
-      // 🟢 FIX: Instantly append the message to the screen without waiting for reload
       setMessages((prev) => {
-        // Prevent duplicate messages if the socket also delivers it
         if (prev.some((m) => m.id === newMsg.id)) return prev;
         return [...prev, newMsg];
       });
 
-      // Scroll to the bottom to see the new message
       setTimeout(
         () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }),
-        100,
+        100
       );
     } catch (error) {
-      console.error("Message send error:", error);
-      toast.error("Failed to send message or upload file");
+      console.error("Direct S3 upload error:", error);
+      toast.error(
+        error.response?.data?.message || "Failed to upload file or send message"
+      );
+      throw error; // Re-throw to inform ChatArea
+    } finally {
+      setUploadProgress(0); // Reset progress
     }
   };
 
@@ -332,7 +365,7 @@ export default function Groups() {
   const handleDeleteGroup = async () => {
     if (
       !window.confirm(
-        `Are you absolutely sure you want to DELETE "${activeGroup.name}"?`,
+        `Are you absolutely sure you want to DELETE "${activeGroup.name}"?`
       )
     )
       return;
@@ -350,7 +383,7 @@ export default function Groups() {
   const handleClearChat = async () => {
     if (
       !window.confirm(
-        "Are you sure you want to permanently delete ALL messages in this group?",
+        "Are you sure you want to permanently delete ALL messages in this group?"
       )
     )
       return;
@@ -375,14 +408,15 @@ export default function Groups() {
         onGroupSelect={handleGroupSelect}
         isAdmin={isAdmin}
         onOpenCreateModal={() => handleOpenModal("CREATE")}
-        isLoadingGroups={isLoadingGroups} // 🟢 Passed to component
+        isLoadingGroups={isLoadingGroups}
       />
       <ChatArea
         activeGroup={activeGroup}
         messages={messages}
         currentUserId={currentUserId}
         isLoadingMore={isLoadingMore}
-        isLoadingInitialMessages={isLoadingInitialMessages} // 🟢 Passed to component
+        isLoadingInitialMessages={isLoadingInitialMessages}
+        uploadProgress={uploadProgress} // 🟢 Passed to component
         onScroll={handleScroll}
         onSendMessage={handleSendMessage}
         onOpenInfo={() => setIsGroupInfoOpen(true)}

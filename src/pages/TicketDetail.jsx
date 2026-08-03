@@ -22,8 +22,10 @@ import {
   Clock,
   CalendarClock,
   Target,
+  UploadCloud,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import axios from "axios";
 
 import api from "../services/api";
 import { useAuth } from "../hooks/useAuth";
@@ -57,9 +59,28 @@ export default function TicketDetail() {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null); // 🟢 NEW: Image preview state
   const [isSending, setIsSending] = useState(false);
+
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  // 🟢 NEW: State and Refs for drag events & auto-expanding textarea
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0); // Prevents drag flickering on children
+  const textareaRef = useRef(null); // Dynamic textarea height
+
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // 🟢 NEW: Generate and clean up local image previews
+  useEffect(() => {
+    if (selectedFile && selectedFile.type?.startsWith("image/")) {
+      const url = URL.createObjectURL(selectedFile);
+      setPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    }
+    setPreviewUrl(null);
+  }, [selectedFile]);
 
   const fetchTicketData = async () => {
     try {
@@ -101,41 +122,135 @@ export default function TicketDetail() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSendMessage = async (e) => {
+  // 🟢 UPDATED: Anti-flicker Drag and Drop Handlers
+  const handleDragEnter = (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1;
+
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current -= 1;
+
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      setSelectedFile(files[0]);
+    }
+  };
+
+  // 🟢 Paste Handler for Screenshots
+  const handlePaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].kind === "file") {
+        const file = items[i].getAsFile();
+        if (file) {
+          setSelectedFile(file);
+          e.preventDefault();
+          return;
+        }
+      }
+    }
+  };
+
+  // 🟢 NEW: Auto-expanding Textarea Change Handler
+  const handleTextareaChange = (e) => {
+    setNewMessage(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  };
+
+  const handleSendMessage = async (e) => {
+    if (e) e.preventDefault();
     if (!newMessage.trim() && !selectedFile) return;
 
     setIsSending(true);
     try {
-      let attachmentUrl = null;
-      let attachmentName = null;
+      let finalS3Url = null;
+      let finalFileName = null;
 
       if (selectedFile) {
-        const formData = new FormData();
-        formData.append("file", selectedFile);
+        const MAX_FILE_SIZE = 25 * 1024 * 1024;
+        if (selectedFile.size > MAX_FILE_SIZE) {
+          toast.error("File is too large. Maximum size allowed is 25MB.");
+          setIsSending(false);
+          return;
+        }
 
-        const uploadRes = await api.post("/upload", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
+        setUploadProgress(1);
+
+        const presignedRes = await api.post("/upload/presigned-url", {
+          fileName: selectedFile.name,
+          fileType: selectedFile.type || "application/octet-stream",
         });
 
-        attachmentUrl = uploadRes.data.data?.url || uploadRes.data.url;
-        attachmentName = selectedFile.name;
+        const { uploadUrl, fileUrl } = presignedRes.data.data;
+
+        await axios.put(uploadUrl, selectedFile, {
+          headers: {
+            "Content-Type": selectedFile.type || "application/octet-stream",
+          },
+          onUploadProgress: (progressEvent) => {
+            if (progressEvent.total) {
+              const percentCompleted = Math.round(
+                (progressEvent.loaded * 100) / progressEvent.total
+              );
+              setUploadProgress(percentCompleted);
+            }
+          },
+        });
+
+        finalS3Url = fileUrl;
+        finalFileName = selectedFile.name;
       }
 
       await api.post(`/tickets/${id}/messages`, {
         message: newMessage,
-        attachmentUrl,
-        attachmentName,
+        attachmentUrl: finalS3Url,
+        attachmentName: finalFileName,
       });
 
       setNewMessage("");
       setSelectedFile(null);
+
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+      }
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error) {
-      toast.error("Failed to send message.");
+      toast.error(
+        error.response?.data?.message || "Failed to upload file or send message."
+      );
       console.error(error);
     } finally {
       setIsSending(false);
+      setUploadProgress(0);
     }
   };
 
@@ -215,7 +330,6 @@ export default function TicketDetail() {
     isAgent && ticket.status !== "CLOSED" && ticket.status !== "RESOLVED";
   const currentUserId = user?.id || user?.userId;
 
-  // 🟢 NEW: TAT / SLA Computation for the Metadata Card
   const isClosed = ticket.status === "CLOSED" || ticket.status === "RESOLVED";
   const tatDate = ticket.tat ? new Date(ticket.tat) : null;
   const isOverdue = tatDate && !isClosed && new Date() > tatDate;
@@ -229,7 +343,7 @@ export default function TicketDetail() {
             variant="ghost"
             onClick={() => navigate("/tickets")}
             className="p-2 h-auto hover:bg-slate-50 text-slate-500 hover:text-slate-900 transition-colors rounded-lg"
-            aria-label="Back to Queue"
+            aria-label="Back to tickets"
           >
             <ArrowLeft size={18} />
           </Button>
@@ -245,7 +359,6 @@ export default function TicketDetail() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* 🟢 NEW: Proactive vs Reactive Badges */}
           {ticket.ticket_type === "PROACTIVE" ? (
             <span className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-600/20 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide">
               <Target size={14} /> Admin's Task
@@ -265,12 +378,10 @@ export default function TicketDetail() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {/* LEFT COLUMN: Main Info & Chat */}
         <div className="lg:col-span-2 xl:col-span-3 space-y-6 flex flex-col">
           <Card className="shadow-sm border-slate-200/60 rounded-xl bg-white overflow-hidden shrink-0">
-            {/* Top Header Section with light background */}
+            {/* Top Header Section */}
             <div className="border-b border-slate-100 p-6 sm:p-8 bg-slate-50/40">
-              {/* Title & Date Row */}
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 bg-slate-900 text-white rounded-xl shadow-sm shrink-0">
@@ -288,15 +399,13 @@ export default function TicketDetail() {
                       day: "numeric",
                       hour: "numeric",
                       minute: "numeric",
-                      timeZone: "America/Chicago", // Forces the UI to evaluate and print strictly in Central Time
                     }).format(new Date(ticket.created_at))}
                   </span>
                 </div>
               </div>
 
-              {/* 🟢 ENHANCED: Three Side-by-Side Metadata Cards */}
+              {/* Metadata Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* 1. Routed To Card */}
                 <div className="bg-indigo-50/60 p-4 rounded-xl border border-indigo-100/80 shadow-sm flex flex-col justify-center">
                   <span className="text-[11px] font-bold text-slate-500 tracking-wider mb-1 uppercase">
                     Routed To
@@ -306,7 +415,6 @@ export default function TicketDetail() {
                   </span>
                 </div>
 
-                {/* 2. Submitted By Card */}
                 <div className="bg-emerald-50/30 p-4 rounded-xl border border-emerald-100/80 shadow-sm flex flex-col justify-center">
                   <span className="text-[11px] font-bold text-slate-500 tracking-wider mb-1 uppercase">
                     Submitted By
@@ -330,7 +438,6 @@ export default function TicketDetail() {
                   </div>
                 </div>
 
-                {/* 🟢 3. SLA / TAT Deadline Card */}
                 <div
                   className={cn(
                     "p-4 rounded-xl border shadow-sm flex flex-col justify-center transition-colors",
@@ -365,19 +472,17 @@ export default function TicketDetail() {
                   <span className="text-[15px] font-bold">
                     {tatDate
                       ? new Intl.DateTimeFormat("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "numeric",
-                          timeZone: "America/Chicago",
-                        }).format(tatDate)
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "numeric",
+                      }).format(tatDate)
                       : "Standard Reactive"}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Email Body Section */}
             <CardContent className="p-6 sm:p-8 bg-white">
               {(() => {
                 const cleanMessage = (text) => {
@@ -389,8 +494,8 @@ export default function TicketDetail() {
                 const message =
                   cleanMessage(
                     ticket.description ||
-                      ticket.reason ||
-                      ticket.generated_email_body,
+                    ticket.reason ||
+                    ticket.generated_email_body,
                   ) || "No additional comments or details were provided.";
 
                 return (
@@ -427,7 +532,6 @@ export default function TicketDetail() {
                 );
               })()}
 
-              {/* Attachments Section */}
               {attachments.length > 0 && (
                 <div className="pt-8 mt-8 border-t border-slate-100">
                   <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
@@ -458,7 +562,26 @@ export default function TicketDetail() {
           </Card>
 
           {/* Secure Support Thread */}
-          <Card className="shadow-sm border-slate-200/60 rounded-xl bg-white flex flex-col flex-1 min-h-[500px]">
+          <Card
+            className="shadow-sm border-slate-200/60 rounded-xl bg-white flex flex-col flex-1 min-h-[500px] relative overflow-hidden transition-all"
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {/* 🟢 UPDATED: Anti-flicker Drag & Drop Overlay */}
+            {isDragging && (
+              <div className="absolute inset-0 z-50 bg-indigo-50/90 backdrop-blur-sm border-4 border-dashed border-indigo-400 m-2 rounded-xl flex flex-col items-center justify-center transition-all duration-200">
+                <div className="pointer-events-none flex flex-col items-center">
+                  <div className="h-20 w-20 bg-white rounded-full flex items-center justify-center shadow-lg mb-4 animate-bounce">
+                    <UploadCloud size={40} className="text-indigo-600" />
+                  </div>
+                  <h3 className="text-2xl font-extrabold text-indigo-900 tracking-tight">Drop your file to attach</h3>
+                  <p className="text-indigo-600 font-medium mt-2">Supports images, PDFs, and docs</p>
+                </div>
+              </div>
+            )}
+
             <CardHeader className="bg-white border-b border-slate-100 py-4 px-6 flex flex-row items-center justify-between sticky top-0 z-10">
               <CardTitle className="text-base font-semibold text-slate-900 flex items-center gap-2 tracking-tight">
                 <MessageSquare size={18} className="text-slate-400" />
@@ -492,20 +615,18 @@ export default function TicketDetail() {
                         <span className="text-[10px] font-medium text-slate-400">
                           {msg.created_at
                             ? new Intl.DateTimeFormat("en-US", {
-                                hour: "numeric",
-                                minute: "numeric",
-                                timeZone: "America/Chicago",
-                              }).format(new Date(msg.created_at))
+                              hour: "numeric",
+                              minute: "numeric",
+                            }).format(new Date(msg.created_at))
                             : ""}
                         </span>
                       </div>
 
                       <div
-                        className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 text-sm rounded-2xl ${
-                          isMine
-                            ? "bg-indigo-600 text-white rounded-tr-sm shadow-sm"
-                            : "bg-white border border-slate-200/60 text-slate-800 rounded-tl-sm shadow-sm"
-                        }`}
+                        className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 text-sm rounded-2xl ${isMine
+                          ? "bg-indigo-600 text-white rounded-tr-sm shadow-sm"
+                          : "bg-white border border-slate-200/60 text-slate-800 rounded-tl-sm shadow-sm"
+                          }`}
                       >
                         {msg.attachment_url && (
                           <a
@@ -517,9 +638,9 @@ export default function TicketDetail() {
                             {msg.attachment_name?.match(
                               /\.(jpeg|jpg|gif|png|webp|avif)$/i,
                             ) ||
-                            msg.attachment_url?.match(
-                              /\.(jpeg|jpg|gif|png|webp|avif)(\?.*)?$/i,
-                            ) ? (
+                              msg.attachment_url?.match(
+                                /\.(jpeg|jpg|gif|png|webp|avif)(\?.*)?$/i,
+                              ) ? (
                               <img
                                 src={msg.attachment_url}
                                 alt="attachment"
@@ -546,7 +667,7 @@ export default function TicketDetail() {
                         )}
 
                         {msg.message && (
-                          <p className="whitespace-pre-wrap leading-relaxed">
+                          <p className="whitespace-pre-wrap leading-relaxed break-words">
                             {msg.message}
                           </p>
                         )}
@@ -560,19 +681,48 @@ export default function TicketDetail() {
 
             {/* Chat Input */}
             {ticket.status !== "CLOSED" && (
-              <div className="border-t border-slate-100 bg-white p-4 rounded-b-xl">
-                {selectedFile && (
-                  <div className="flex items-center gap-3 mb-3 p-2 bg-slate-50 rounded-lg border border-slate-200/60 w-fit">
-                    <File size={14} className="text-indigo-500" />
-                    <span className="text-xs text-slate-700 truncate max-w-[200px] font-medium">
+              <div className="border-t border-slate-100 bg-white p-4 rounded-b-xl relative z-10">
+
+                {isSending && uploadProgress > 0 && (
+                  <div className="mb-3 p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl space-y-1.5 shadow-sm">
+                    <div className="flex justify-between items-center text-xs font-semibold text-indigo-900">
+                      <span className="truncate max-w-[250px]">
+                        Uploading {selectedFile?.name}...
+                      </span>
+                      <span className="tabular-nums font-bold">{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-indigo-200/60 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-indigo-600 h-2 rounded-full transition-all duration-200 ease-out"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 🟢 UPDATED: Attachment preview with image thumbnails */}
+                {selectedFile && !isSending && (
+                  <div className="flex items-center gap-3 mb-3 p-2 bg-indigo-50/50 rounded-lg border border-indigo-100 shadow-sm w-fit relative group">
+                    {previewUrl ? (
+                      <div className="h-10 w-10 rounded overflow-hidden shrink-0 bg-slate-100 border border-indigo-200/50">
+                        <img src={previewUrl} alt="Preview" className="h-full w-full object-cover" />
+                      </div>
+                    ) : (
+                      <File size={16} className="text-indigo-500 ml-1" />
+                    )}
+                    <span className="text-xs text-slate-700 truncate max-w-[200px] font-semibold pr-2">
                       {selectedFile.name}
                     </span>
                     <button
                       type="button"
-                      onClick={() => setSelectedFile(null)}
-                      className="text-slate-400 hover:text-red-500 transition-colors"
+                      onClick={() => {
+                        setSelectedFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                      }}
+                      className="text-slate-400 hover:text-red-500 p-1 bg-white hover:bg-red-50 rounded-md border border-slate-200 transition-colors absolute -top-2 -right-2 shadow-sm"
+                      aria-label="Remove attachment"
                     >
-                      <X size={14} />
+                      <X size={12} />
                     </button>
                   </div>
                 )}
@@ -590,17 +740,22 @@ export default function TicketDetail() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-2.5 text-slate-400 hover:text-indigo-600 rounded-lg transition-colors flex-shrink-0"
+                    disabled={isSending}
+                    className="p-2.5 text-slate-400 hover:text-indigo-600 rounded-lg transition-colors flex-shrink-0 disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                     aria-label="Attach file"
                   >
                     <Paperclip size={20} />
                   </button>
 
+                  {/* 🟢 UPDATED: Auto-expanding textarea */}
                   <textarea
+                    ref={textareaRef}
                     value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Reply to this thread..."
-                    className="flex-1 max-h-32 min-h-[44px] bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white resize-none transition-all custom-scrollbar"
+                    onChange={handleTextareaChange}
+                    onPaste={handlePaste}
+                    disabled={isSending}
+                    placeholder="Reply to this thread or paste an image..."
+                    className="flex-1 max-h-32 min-h-[44px] bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white resize-none transition-all custom-scrollbar disabled:bg-slate-100"
                     rows={1}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
@@ -615,6 +770,7 @@ export default function TicketDetail() {
                     disabled={
                       isSending || (!newMessage.trim() && !selectedFile)
                     }
+                    aria-label="Send message"
                     className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0 h-[44px] w-[44px] flex items-center justify-center shadow-sm"
                   >
                     <Send
@@ -630,7 +786,6 @@ export default function TicketDetail() {
 
         {/* RIGHT COLUMN: Action Cards */}
         <div className="space-y-6 flex flex-col">
-          {/* Action: Ticket Routing */}
           {canRoute && (
             <Card className="shadow-sm border-slate-200/60 rounded-xl bg-white overflow-hidden">
               <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-3 pt-4 px-5">
@@ -678,8 +833,6 @@ export default function TicketDetail() {
             </Card>
           )}
 
-          {/* Action: Voice Huddle (Dark Premium UI) */}
-          {/* Action: Voice Huddle (Dark Premium UI) */}
           {ticket.status !== "CLOSED" && ticket.status !== "RESOLVED" && (
             <Card className="bg-slate-900 border-slate-800 shadow-md rounded-xl overflow-hidden relative">
               <div className="absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 bg-indigo-500 opacity-20 rounded-full blur-3xl pointer-events-none"></div>
@@ -694,7 +847,6 @@ export default function TicketDetail() {
                 </p>
                 <Button
                   onClick={() => {
-                    // 🟢 UPDATED: Professional maintenance/coming soon popup
                     toast(
                       "The Voice Huddle feature is currently undergoing system upgrades and will be available soon.",
                       {
@@ -716,7 +868,6 @@ export default function TicketDetail() {
             </Card>
           )}
 
-          {/* Action: Status Management */}
           <Card className="shadow-sm border-slate-200/60 rounded-xl bg-white">
             <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-3 pt-4 px-5">
               <CardTitle className="text-xs font-semibold flex items-center gap-2 text-slate-700 uppercase tracking-wider">
@@ -724,12 +875,11 @@ export default function TicketDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-5">
-              {/* 🟢 THE FIX: Strict Frontend Authorization Check */}
               {(String(ticket.assignee_id) === String(user.id) ||
                 ["BACK_OFFICE_MANAGER", "CEO", "BACK_OFFICE_MEMBER"].includes(
                   user.role,
                 )) &&
-              ticket.status !== "CLOSED" ? (
+                ticket.status !== "CLOSED" ? (
                 <form onSubmit={handleUpdateStatus} className="space-y-4">
                   <div className="flex flex-col space-y-1.5">
                     <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
@@ -791,7 +941,6 @@ export default function TicketDetail() {
             </CardContent>
           </Card>
 
-          {/* Action: Ticket Journey Timeline */}
           <Card className="shadow-sm border-slate-200/60 rounded-xl bg-white">
             <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-3 pt-4 px-5">
               <CardTitle className="text-xs font-semibold flex items-center gap-2 text-slate-700 uppercase tracking-wider">
@@ -851,7 +1000,6 @@ export default function TicketDetail() {
                               day: "numeric",
                               hour: "2-digit",
                               minute: "2-digit",
-                              timeZone: "America/Chicago",
                               hour12: true,
                             })}
                             {step.actor_name && ` • ${step.actor_name}`}
@@ -865,7 +1013,6 @@ export default function TicketDetail() {
             </CardContent>
           </Card>
 
-          {/* Action: Call History */}
           <Card className="shadow-sm border-slate-200/60 rounded-xl bg-white">
             <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-3 pt-4 px-5">
               <CardTitle className="text-xs font-semibold flex items-center gap-2 text-slate-700 uppercase tracking-wider">
@@ -911,13 +1058,12 @@ export default function TicketDetail() {
                               <span className="text-[10px] text-slate-400">
                                 {log.started_at
                                   ? new Intl.DateTimeFormat("en-US", {
-                                      month: "short",
-                                      day: "numeric",
-                                      hour: "numeric",
-                                      minute: "numeric",
-                                      timeZone: "America/Chicago",
-                                      hour12: true,
-                                    }).format(new Date(log.started_at))
+                                    month: "short",
+                                    day: "numeric",
+                                    hour: "numeric",
+                                    minute: "numeric",
+                                    hour12: true,
+                                  }).format(new Date(log.started_at))
                                   : ""}
                               </span>
                             </div>

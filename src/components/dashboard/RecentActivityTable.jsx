@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, User } from "lucide-react";
 import { Button } from "../common/Button";
 import { cn } from "../../utils/cn";
 
@@ -74,7 +74,7 @@ export const RecentActivityTable = ({ tickets }) => {
         <table className="w-full text-sm text-left">
           <thead className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider font-semibold border-b border-slate-200/60">
             <tr>
-              <th className="px-6 py-4">Ticket ID</th>
+              <th className="px-6 py-4">Ticket / Assignee</th>
               <th className="px-6 py-4">Category</th>
               <th className="px-6 py-4">Priority</th>
               <th className="px-6 py-4">Status</th>
@@ -98,8 +98,25 @@ export const RecentActivityTable = ({ tickets }) => {
                   key={ticket.id}
                   className="hover:bg-slate-50/80 transition-colors group"
                 >
-                  <td className="px-6 py-4 font-mono text-slate-500 font-medium group-hover:text-indigo-600 transition-colors">
-                    {ticket.id.substring(0, 8)}...
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-mono text-slate-500 font-medium group-hover:text-indigo-600 transition-colors">
+                        #{ticket.id.substring(0, 8)}
+                      </span>
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <User size={12} className="text-slate-400" />
+                        <span
+                          className={cn(
+                            "font-bold",
+                            ticket.assignee_name
+                              ? "text-slate-700"
+                              : "text-slate-400 italic",
+                          )}
+                        >
+                          {ticket.assignee_name || "Unassigned"}
+                        </span>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-6 py-4 font-semibold text-slate-800">
                     {ticket.category_level_1}

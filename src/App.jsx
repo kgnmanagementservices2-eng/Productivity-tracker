@@ -29,6 +29,7 @@ import Groups from "./pages/Groups";
 import Workload from "./pages/Workload";
 import CategoryManager from "./pages/CategoryManager";
 import AdminSetup from "./pages/AdminSetup";
+import PerformanceTracker from "./pages/PerformanceTracker"; // 🟢 NEW: Import Performance Tracker
 
 function App() {
   // 🟢 NEW: Track the user's internet connection status
@@ -72,7 +73,7 @@ function App() {
                 <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
                 {/* ==========================================
-                    PROTECTED WORKSPACE (Requires Login)
+                    PROTECTED WORKSPACE (Requires Login & Layout)
                     ========================================== */}
                 <Route
                   path="/"
@@ -141,15 +142,7 @@ function App() {
                     <Route
                       path=":id/huddle"
                       element={
-                        <ProtectedRoute
-                          allowedRoles={[
-                            "EMPLOYEE",
-                            "BACK_OFFICE_MANAGER",
-                            "BACK_OFFICE_MEMBER",
-                            "GLOBAL_ADMIN",
-                            "MARKET_MANAGER",
-                          ]}
-                        >
+                        <ProtectedRoute allowedRoles={["GLOBAL_ADMIN"]}>
                           <HuddleRoom />
                         </ProtectedRoute>
                       }
@@ -194,6 +187,17 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
+
+                  {/* 🟢 FIXED: Moved Performance Tracker INSIDE the layout wrapper */}
+                  <Route
+                    path="performance"
+                    element={
+                      <ProtectedRoute allowedRoles={["GLOBAL_ADMIN", "CEO"]}>
+                        <PerformanceTracker />
+                      </ProtectedRoute>
+                    }
+                  />
+
                   <Route
                     path="categories"
                     element={
@@ -226,5 +230,4 @@ function App() {
     </>
   );
 }
-
 export default App;

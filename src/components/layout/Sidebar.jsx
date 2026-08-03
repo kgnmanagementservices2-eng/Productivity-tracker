@@ -31,7 +31,7 @@ export const Sidebar = () => {
     const fetchTrueTime = async () => {
       try {
         const response = await fetch(
-          "http://worldtimeapi.org/api/timezone/America/Chicago",
+          "https://worldtimeapi.org/api/timezone/America/Chicago",
         );
         const data = await response.json();
 
@@ -112,8 +112,8 @@ export const Sidebar = () => {
       ],
     },
     {
-      name: "Active Huddles",
-      path: "/huddles",
+      name: "Performance",
+      path: "/performance",
       icon: PhoneCall,
       group: "Overview",
       allowedRoles: ["GLOBAL_ADMIN", "CEO"],
