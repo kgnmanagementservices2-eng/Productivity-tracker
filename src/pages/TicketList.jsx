@@ -22,6 +22,8 @@ import {
   Building2,
   Users,
   ChevronDown,
+  Filter,
+  MapPin,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -35,21 +37,16 @@ import { cn } from "../utils/cn";
 import { CreateTicketModal } from "../components/tickets/CreateTicketModal";
 import { ReassignTicketModal } from "../components/tickets/ReassignTicketModal";
 
-// 🟢 NEW: Bulletproof Date Parser to prevent "Invalid Date" crashes across browsers
-// 🟢 NEW: Bulletproof Date Parser to prevent "Invalid Date" crashes and force UTC tracking
+// Bulletproof Date Parser to prevent "Invalid Date" crashes and force UTC tracking
 const parseSafeDate = (dateVal) => {
   if (!dateVal) return new Date();
 
   let safeStr = dateVal;
 
   if (typeof safeStr === "string") {
-    // Safari fails on "YYYY-MM-DD HH:MM:SS". It needs a "T" in between.
     if (!safeStr.includes("T")) {
       safeStr = safeStr.replace(" ", "T");
     }
-
-    // 🟢 FORCE UTC: If the timestamp lacks a timezone identifier (Z, +, or -), append Z
-    // This stops the browser from assuming the DB time is local system time.
     if (!safeStr.endsWith("Z") && !safeStr.match(/[+-]\d{2}:\d{2}$/)) {
       safeStr += "Z";
     }
@@ -67,9 +64,16 @@ export default function TicketList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
-
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [assigneeFilter, setAssigneeFilter] = useState("");
+
+  // 🟢 NEW: Market Filter State
+  const [marketFilter, setMarketFilter] = useState("");
+  const [marketsList, setMarketsList] = useState([]);
+
+  // 🟢 NEW: UI State for Flipkart-style Filter Panel
+  const [showFilters, setShowFilters] = useState(false);
+
   const [departmentsList, setDepartmentsList] = useState([]);
   const [allMembersList, setAllMembersList] = useState([]);
 
@@ -106,6 +110,23 @@ export default function TicketList() {
           }
         }
 
+        // 🟢 NEW: Fetch Markets for Admins, Managers, and Members
+        if (
+          [
+            "GLOBAL_ADMIN",
+            "CEO",
+            "BACK_OFFICE_MANAGER",
+            "BACK_OFFICE_MEMBER",
+          ].includes(user?.role)
+        ) {
+          const marketRes = await api
+            .get("/admin/markets?paginate=false")
+            .catch(() => null);
+          if (marketRes?.data?.data) {
+            setMarketsList(marketRes.data.data);
+          }
+        }
+
         if (
           ["GLOBAL_ADMIN", "CEO", "BACK_OFFICE_MANAGER"].includes(user?.role)
         ) {
@@ -137,6 +158,9 @@ export default function TicketList() {
       if (departmentFilter) params.append("departmentId", departmentFilter);
       if (assigneeFilter) params.append("assigneeId", assigneeFilter);
 
+      // 🟢 NEW: Append Market Filter to API Request
+      if (marketFilter) params.append("marketId", marketFilter);
+
       const response = await api.get(`/tickets?${params.toString()}`);
 
       if (response.data.meta) {
@@ -167,6 +191,7 @@ export default function TicketList() {
     priorityFilter,
     departmentFilter,
     assigneeFilter,
+    marketFilter, // Added to dependency array
   ]);
 
   // Handle Socket Events
@@ -205,9 +230,19 @@ export default function TicketList() {
       setDepartmentFilter("");
     }
     setAssigneeFilter("");
+    setMarketFilter(""); // Clear Market
     setSearchTerm("");
     setPage(1);
   };
+
+  // Count active filters for the badge
+  const activeFiltersCount = [
+    statusFilter,
+    priorityFilter,
+    departmentFilter,
+    assigneeFilter,
+    marketFilter,
+  ].filter(Boolean).length;
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
@@ -336,61 +371,13 @@ export default function TicketList() {
     );
   };
 
-  // const renderTicketAge = (ticket) => {
-  //   // 🟢 SECURE DATE PARSING
-  //   const start = parseSafeDate(ticket.created_at);
-  //   const end =
-  //     ticket.status === "CLOSED" || ticket.status === "RESOLVED"
-  //       ? parseSafeDate(ticket.updated_at || new Date())
-  //       : new Date();
-
-  //   // 🟢 CLOCK DRIFT PROTECTION: Prevent negative milliseconds if AWS and local computer are out of sync by a few seconds
-  //   const diffMs = Math.max(0, end - start);
-
-  //   const diffHrs = diffMs / (1000 * 60 * 60);
-  //   const displayHrs = Math.floor(diffHrs);
-  //   const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-  //   let timeText = "";
-  //   if (displayHrs > 24)
-  //     timeText = `${Math.floor(displayHrs / 24)}d ${displayHrs % 24}h`;
-  //   else if (displayHrs > 0) timeText = `${displayHrs}h ${diffMins}m`;
-  //   else timeText = `${diffMins}m`;
-
-  //   const targetHours = 12;
-  //   const progressPercent = Math.min(
-  //     (Math.max(0, diffHrs) / targetHours) * 100,
-  //     100,
-  //   );
-
-  //   let barColor = "bg-indigo-400";
-  //   if (ticket.status === "CLOSED" || ticket.status === "RESOLVED")
-  //     barColor = "bg-emerald-400";
-  //   else if (diffHrs >= 12) barColor = "bg-red-500";
-  //   else if (diffHrs >= 6) barColor = "bg-amber-400";
-
-  //   return (
-  //     <div className="flex flex-col gap-1.5 w-24">
-  //       <span className="font-bold text-slate-800 text-sm">{timeText}</span>
-  //       <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-  //         <div
-  //           className={`h-full ${barColor} rounded-full`}
-  //           style={{ width: `${progressPercent}%` }}
-  //         ></div>
-  //       </div>
-  //     </div>
-  //   );
-  // };
-
   const renderTicketAge = (ticket) => {
-    // 🟢 SECURE DATE PARSING
     const start = parseSafeDate(ticket.created_at);
     const isClosed = ticket.status === "CLOSED" || ticket.status === "RESOLVED";
     const end = isClosed
       ? parseSafeDate(ticket.updated_at || new Date())
       : new Date();
 
-    // 🟢 CLOCK DRIFT PROTECTION: Prevent negative milliseconds
     const diffMs = Math.max(0, end - start);
 
     const diffHrs = diffMs / (1000 * 60 * 60);
@@ -403,7 +390,6 @@ export default function TicketList() {
     else if (displayHrs > 0) timeText = `${displayHrs}h ${diffMins}m`;
     else timeText = `${diffMins}m`;
 
-    // 🟢 IF RESOLVED/CLOSED: Show completed bar with a resolution stamp
     if (isClosed) {
       const formattedDate = new Intl.DateTimeFormat("en-US", {
         month: "short",
@@ -420,7 +406,6 @@ export default function TicketList() {
             <span className="font-extrabold text-emerald-600 text-[13px] tracking-tight">
               {timeText}
             </span>
-            {/* Completion Stamp Icon */}
             <svg
               className="w-3.5 h-3.5 text-emerald-500 drop-shadow-sm"
               fill="none"
@@ -436,12 +421,10 @@ export default function TicketList() {
             </svg>
           </div>
 
-          {/* 100% Completed Progress Bar */}
           <div className="h-1.5 w-full bg-emerald-100/80 rounded-full overflow-hidden shadow-inner">
             <div className="h-full bg-emerald-500 rounded-full w-full"></div>
           </div>
 
-          {/* Micro-Typography Date Stamp */}
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">
             {formattedDate}
           </span>
@@ -449,14 +432,12 @@ export default function TicketList() {
       );
     }
 
-    // 🟢 IF OPEN: Show the standard ticking age and dynamic progress bar (NO text)
     const targetHours = 12;
     const progressPercent = Math.min(
       (Math.max(0, diffHrs) / targetHours) * 100,
       100,
     );
 
-    // Dynamic coloring for both the bar AND the track for a premium look
     let barColor = "bg-indigo-500";
     let trackColor = "bg-indigo-100";
 
@@ -474,7 +455,6 @@ export default function TicketList() {
           {timeText}
         </span>
 
-        {/* Dynamic Progress Bar */}
         <div
           className={`h-1.5 w-full ${trackColor} rounded-full overflow-hidden shadow-inner`}
         >
@@ -486,6 +466,7 @@ export default function TicketList() {
       </div>
     );
   };
+
   const renderTAT = (ticket) => {
     if (!ticket.tat) {
       return (
@@ -495,7 +476,6 @@ export default function TicketList() {
       );
     }
 
-    // 🟢 SECURE DATE PARSING
     const tatDate = parseSafeDate(ticket.tat);
     const isClosed = ticket.status === "CLOSED" || ticket.status === "RESOLVED";
     const isOverdue = !isClosed && new Date() > tatDate;
@@ -615,142 +595,214 @@ export default function TicketList() {
 
       <Card className="border-slate-200/80 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.05)] rounded-2xl overflow-hidden">
         <CardContent className="p-0 flex flex-col min-h-[500px]">
-          <div className="p-4 bg-slate-100 border-b border-slate-200 flex flex-col md:flex-row gap-3 justify-between items-center">
-            <div className="relative w-full max-w-sm shrink-0">
-              <Search
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
-                size={18}
-              />
-              <Input
-                placeholder="Search categories or IDs..."
-                className="pl-10 bg-white border-slate-300/80 shadow-sm h-11 text-sm rounded-lg"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+          {/* 🟢 NEW: Enhanced Action Bar with Toggleable Filters */}
+          <div className="p-4 bg-slate-100 border-b border-slate-200 flex flex-col gap-3 transition-all duration-300">
+            {/* Top Row: Search and Action Buttons */}
+            <div className="flex flex-col md:flex-row gap-3 justify-between items-center">
+              <div className="relative w-full max-w-sm shrink-0">
+                <Search
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                  size={18}
+                />
+                <Input
+                  placeholder="Search categories or IDs..."
+                  className="pl-10 bg-white border-slate-300/80 shadow-sm h-11 text-sm rounded-lg w-full"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              <div className="flex w-full md:w-auto gap-3 items-center justify-end">
+                {/* 🟢 FILTER TOGGLE BUTTON */}
+                <Button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={cn(
+                    "h-11 px-4 shadow-sm rounded-lg whitespace-nowrap border transition-all shrink-0",
+                    showFilters
+                      ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+                      : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50",
+                  )}
+                >
+                  <Filter
+                    size={16}
+                    className={
+                      showFilters
+                        ? "mr-2 text-indigo-500"
+                        : "mr-2 text-slate-400"
+                    }
+                  />
+                  Filters
+                  {activeFiltersCount > 0 && (
+                    <span className="ml-2 bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                      {activeFiltersCount}
+                    </span>
+                  )}
+                </Button>
+
+                {[
+                  "EMPLOYEE",
+                  "MARKET_MANAGER",
+                  "GLOBAL_ADMIN",
+                  "CEO",
+                  "BACK_OFFICE_MANAGER",
+                  "BACK_OFFICE_MEMBER",
+                ].includes(user?.role) && (
+                    <Button
+                      onClick={() => setIsCreateModalOpen(true)}
+                      className="h-11 px-5 shadow-sm rounded-lg whitespace-nowrap bg-slate-900 text-white hover:bg-indigo-600 border-0 shrink-0 transition-colors"
+                    >
+                      <Plus size={16} className="mr-2" />
+                      {[
+                        "GLOBAL_ADMIN",
+                        "CEO",
+                        "BACK_OFFICE_MANAGER",
+                        "BACK_OFFICE_MEMBER",
+                      ].includes(user?.role)
+                        ? "Assign Task"
+                        : "New Ticket"}
+                    </Button>
+                  )}
+              </div>
             </div>
 
-            <div className="flex w-full md:w-auto gap-3 items-center overflow-x-auto pb-1 md:pb-0">
-              {[
-                "EMPLOYEE",
-                "MARKET_MANAGER",
-                "GLOBAL_ADMIN",
-                "CEO",
-                "BACK_OFFICE_MANAGER",
-                "BACK_OFFICE_MEMBER",
-              ].includes(user?.role) && (
-                <Button
-                  onClick={() => setIsCreateModalOpen(true)}
-                  className="h-11 px-5 shadow-sm rounded-lg whitespace-nowrap bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 shrink-0"
-                >
-                  <Plus size={16} className="mr-2 text-slate-400" />
-                  {[
-                    "GLOBAL_ADMIN",
-                    "CEO",
-                    "BACK_OFFICE_MANAGER",
-                    "BACK_OFFICE_MEMBER",
-                  ].includes(user?.role)
-                    ? "Assign Task"
-                    : "New Ticket"}
-                </Button>
-              )}
+            {/* 🟢 EXPANDABLE FILTER PANEL */}
+            {showFilters && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 pt-3 mt-1 border-t border-slate-200/80 animate-in slide-in-from-top-2 duration-200">
+                {/* 1. Market Filter */}
+                {[
+                  "GLOBAL_ADMIN",
+                  "CEO",
+                  "BACK_OFFICE_MANAGER",
+                  "BACK_OFFICE_MEMBER",
+                ].includes(user?.role) && (
+                    <div className="relative">
+                      <MapPin
+                        size={16}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                      />
+                      <select
+                        value={marketFilter}
+                        onChange={handleFilterChange(setMarketFilter)}
+                        className="h-10 w-full appearance-none pl-9 pr-8 rounded-lg border border-slate-300/80 bg-white text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer truncate"
+                      >
+                        <option value="">All Clients</option>
+                        {marketsList.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        size={14}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                      />
+                    </div>
+                  )}
 
-              {["GLOBAL_ADMIN", "CEO"].includes(user?.role) && (
-                <div className="relative shrink-0">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Building2 size={16} className="text-slate-400" />
-                  </div>
-                  <select
-                    value={departmentFilter}
-                    onChange={(e) => {
-                      setDepartmentFilter(e.target.value);
-                      setAssigneeFilter("");
-                      setPage(1);
-                    }}
-                    className="h-11 w-44 appearance-none pl-9 pr-8 rounded-lg border border-slate-300/80 bg-white text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer truncate"
-                  >
-                    <option value="">All Departments</option>
-                    {departmentsList.map((dept) => (
-                      <option key={dept.id} value={dept.id}>
-                        {dept.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown
-                    size={14}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-                  />
-                </div>
-              )}
-
-              {["GLOBAL_ADMIN", "CEO", "BACK_OFFICE_MANAGER"].includes(
-                user?.role,
-              ) && (
-                <div className="relative shrink-0">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Users
+                {/* 2. Department Filter */}
+                {["GLOBAL_ADMIN", "CEO"].includes(user?.role) && (
+                  <div className="relative">
+                    <Building2
                       size={16}
-                      className={
-                        !departmentFilter &&
-                        ["GLOBAL_ADMIN", "CEO"].includes(user?.role)
-                          ? "text-slate-300"
-                          : "text-slate-400"
-                      }
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                    />
+                    <select
+                      value={departmentFilter}
+                      onChange={(e) => {
+                        setDepartmentFilter(e.target.value);
+                        setAssigneeFilter("");
+                        setPage(1);
+                      }}
+                      className="h-10 w-full appearance-none pl-9 pr-8 rounded-lg border border-slate-300/80 bg-white text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer truncate"
+                    >
+                      <option value="">All Departments</option>
+                      {departmentsList.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      size={14}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
                     />
                   </div>
+                )}
+
+                {/* 3. Assignee Filter */}
+                {["GLOBAL_ADMIN", "CEO", "BACK_OFFICE_MANAGER"].includes(
+                  user?.role,
+                ) && (
+                    <div className="relative">
+                      <Users
+                        size={16}
+                        className={cn(
+                          "absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none",
+                          !departmentFilter &&
+                            ["GLOBAL_ADMIN", "CEO"].includes(user?.role)
+                            ? "text-slate-300"
+                            : "text-slate-400",
+                        )}
+                      />
+                      <select
+                        value={assigneeFilter}
+                        onChange={handleFilterChange(setAssigneeFilter)}
+                        disabled={
+                          !departmentFilter &&
+                          ["GLOBAL_ADMIN", "CEO"].includes(user?.role)
+                        }
+                        className="h-10 w-full appearance-none pl-9 pr-8 rounded-lg border border-slate-300/80 bg-white text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:bg-slate-50 disabled:text-slate-400 truncate"
+                      >
+                        <option value="">
+                          {!departmentFilter &&
+                            ["GLOBAL_ADMIN", "CEO"].includes(user?.role)
+                            ? "Select Dept First"
+                            : "All Members"}
+                        </option>
+                        <option value="UNASSIGNED">Unassigned (Queue)</option>
+                        {availableMembers.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.name}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        size={14}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                      />
+                    </div>
+                  )}
+
+                {/* 4. Status Filter */}
+                <div className="relative">
                   <select
-                    value={assigneeFilter}
-                    onChange={handleFilterChange(setAssigneeFilter)}
-                    disabled={
-                      !departmentFilter &&
-                      ["GLOBAL_ADMIN", "CEO"].includes(user?.role)
-                    }
-                    className="h-11 w-44 appearance-none pl-9 pr-8 rounded-lg border border-slate-300/80 bg-white text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:bg-slate-50 disabled:text-slate-400 truncate"
+                    value={statusFilter}
+                    onChange={handleFilterChange(setStatusFilter)}
+                    className="h-10 w-full appearance-none px-3 pr-8 rounded-lg border border-slate-300/80 bg-white text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
-                    <option value="">
-                      {!departmentFilter &&
-                      ["GLOBAL_ADMIN", "CEO"].includes(user?.role)
-                        ? "Select Dept..."
-                        : "All Members"}
-                    </option>
-                    <option value="UNASSIGNED">Unassigned (Queue)</option>
-                    {availableMembers.map((member) => (
-                      <option key={member.id} value={member.id}>
-                        {member.name}
-                      </option>
-                    ))}
+                    <option value="">◉ All Status</option>
+                    <option value="OPEN">Open</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="RESOLVED">Resolved</option>
+                    <option value="CLOSED">Closed</option>
                   </select>
                   <ChevronDown
                     size={14}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
                   />
                 </div>
-              )}
-              <select
-                value={statusFilter}
-                onChange={handleFilterChange(setStatusFilter)}
-                className="h-11 w-36 rounded-lg border border-slate-300/80 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shrink-0 cursor-pointer"
-              >
-                <option value="">◉ All Statuses</option>
-                <option value="OPEN">Open</option>
-                <option value="IN_PROGRESS">In Progress</option>
-                <option value="RESOLVED">Resolved</option>
-                <option value="CLOSED">Closed</option>
-              </select>
 
-              {(statusFilter ||
-                priorityFilter ||
-                (["GLOBAL_ADMIN", "CEO"].includes(user?.role) &&
-                  departmentFilter) ||
-                assigneeFilter ||
-                searchTerm) && (
-                <button
-                  onClick={clearFilters}
-                  className="h-11 px-4 flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-                >
-                  <FilterX size={18} />
-                </button>
-              )}
-            </div>
+                {/* 5. Clear Filters Button */}
+                {activeFiltersCount > 0 && (
+                  <button
+                    onClick={clearFilters}
+                    className="h-10 px-4 flex items-center justify-center gap-2 text-sm font-bold text-slate-500 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg transition-colors w-full sm:w-auto"
+                  >
+                    <FilterX size={16} /> Clear All
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="overflow-x-auto flex-1 bg-white">
@@ -761,7 +813,7 @@ export default function TicketList() {
                   <th className="px-6 py-4">Ticket ID</th>
                   <th className="px-6 py-4">Category</th>
                   <th className="px-6 py-4">Priority</th>
-                  <th className="px-6 py-4">Age / Resolved</th>{" "}
+                  <th className="px-6 py-4">Age / Resolved</th>
                   <th className="px-6 py-4">Created At</th>
                   <th className="px-6 py-4">TAT (Deadline)</th>
                   <th className="px-6 py-4">Assigned To</th>
@@ -832,7 +884,6 @@ export default function TicketList() {
                         {renderTicketAge(ticket)}
                       </td>
 
-                      {/* 🟢 SECURE DATE RENDERING */}
                       <td className="px-6 py-5 align-middle text-slate-600 font-medium text-xs">
                         <div className="flex flex-col">
                           <span>

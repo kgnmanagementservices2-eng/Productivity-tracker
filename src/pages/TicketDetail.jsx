@@ -219,7 +219,7 @@ export default function TicketDetail() {
           onUploadProgress: (progressEvent) => {
             if (progressEvent.total) {
               const percentCompleted = Math.round(
-                (progressEvent.loaded * 100) / progressEvent.total
+                (progressEvent.loaded * 100) / progressEvent.total,
               );
               setUploadProgress(percentCompleted);
             }
@@ -245,7 +245,8 @@ export default function TicketDetail() {
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error) {
       toast.error(
-        error.response?.data?.message || "Failed to upload file or send message."
+        error.response?.data?.message ||
+        "Failed to upload file or send message.",
       );
       console.error(error);
     } finally {
@@ -415,7 +416,7 @@ export default function TicketDetail() {
                   </span>
                 </div>
 
-                <div className="bg-emerald-50/30 p-4 rounded-xl border border-emerald-100/80 shadow-sm flex flex-col justify-center">
+                {/* <div className="bg-emerald-50/30 p-4 rounded-xl border border-emerald-100/80 shadow-sm flex flex-col justify-center">
                   <span className="text-[11px] font-bold text-slate-500 tracking-wider mb-1 uppercase">
                     Submitted By
                   </span>
@@ -436,8 +437,34 @@ export default function TicketDetail() {
                       </div>
                     )}
                   </div>
-                </div>
+                </div> */}
+                <div className="bg-emerald-50/30 p-4 rounded-xl border border-emerald-100/80 shadow-sm flex flex-col justify-center">
+                  <span className="text-[11px] font-bold text-slate-500 tracking-wider mb-1 uppercase">
+                    Submitted By
+                  </span>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900 truncate">
+                        {ticket.creator_name || "Employee"}
+                      </span>
+                    </div>
 
+                    {/* Location Badges Container */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {/* Only show Store if it's NOT a proactive ticket */}
+                      {ticket.ticket_type !== "PROACTIVE" && (
+                        <span className="text-[9px] font-bold bg-indigo-50/80 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100/50">
+                          {ticket.store_name || "N/A"}
+                        </span>
+                      )}
+
+                      {/* Show Market for ALL tickets */}
+                      <span className="text-[9px] font-bold bg-emerald-50/80 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-100/50">
+                        {ticket.market_name || "Global HQ"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
                 <div
                   className={cn(
                     "p-4 rounded-xl border shadow-sm flex flex-col justify-center transition-colors",
@@ -576,8 +603,12 @@ export default function TicketDetail() {
                   <div className="h-20 w-20 bg-white rounded-full flex items-center justify-center shadow-lg mb-4 animate-bounce">
                     <UploadCloud size={40} className="text-indigo-600" />
                   </div>
-                  <h3 className="text-2xl font-extrabold text-indigo-900 tracking-tight">Drop your file to attach</h3>
-                  <p className="text-indigo-600 font-medium mt-2">Supports images, PDFs, and docs</p>
+                  <h3 className="text-2xl font-extrabold text-indigo-900 tracking-tight">
+                    Drop your file to attach
+                  </h3>
+                  <p className="text-indigo-600 font-medium mt-2">
+                    Supports images, PDFs, and docs
+                  </p>
                 </div>
               </div>
             )}
@@ -624,8 +655,8 @@ export default function TicketDetail() {
 
                       <div
                         className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 text-sm rounded-2xl ${isMine
-                          ? "bg-indigo-600 text-white rounded-tr-sm shadow-sm"
-                          : "bg-white border border-slate-200/60 text-slate-800 rounded-tl-sm shadow-sm"
+                            ? "bg-indigo-600 text-white rounded-tr-sm shadow-sm"
+                            : "bg-white border border-slate-200/60 text-slate-800 rounded-tl-sm shadow-sm"
                           }`}
                       >
                         {msg.attachment_url && (
@@ -682,14 +713,15 @@ export default function TicketDetail() {
             {/* Chat Input */}
             {ticket.status !== "CLOSED" && (
               <div className="border-t border-slate-100 bg-white p-4 rounded-b-xl relative z-10">
-
                 {isSending && uploadProgress > 0 && (
                   <div className="mb-3 p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl space-y-1.5 shadow-sm">
                     <div className="flex justify-between items-center text-xs font-semibold text-indigo-900">
                       <span className="truncate max-w-[250px]">
                         Uploading {selectedFile?.name}...
                       </span>
-                      <span className="tabular-nums font-bold">{uploadProgress}%</span>
+                      <span className="tabular-nums font-bold">
+                        {uploadProgress}%
+                      </span>
                     </div>
                     <div className="w-full bg-indigo-200/60 rounded-full h-2 overflow-hidden">
                       <div
@@ -705,7 +737,11 @@ export default function TicketDetail() {
                   <div className="flex items-center gap-3 mb-3 p-2 bg-indigo-50/50 rounded-lg border border-indigo-100 shadow-sm w-fit relative group">
                     {previewUrl ? (
                       <div className="h-10 w-10 rounded overflow-hidden shrink-0 bg-slate-100 border border-indigo-200/50">
-                        <img src={previewUrl} alt="Preview" className="h-full w-full object-cover" />
+                        <img
+                          src={previewUrl}
+                          alt="Preview"
+                          className="h-full w-full object-cover"
+                        />
                       </div>
                     ) : (
                       <File size={16} className="text-indigo-500 ml-1" />
@@ -717,7 +753,8 @@ export default function TicketDetail() {
                       type="button"
                       onClick={() => {
                         setSelectedFile(null);
-                        if (fileInputRef.current) fileInputRef.current.value = "";
+                        if (fileInputRef.current)
+                          fileInputRef.current.value = "";
                       }}
                       className="text-slate-400 hover:text-red-500 p-1 bg-white hover:bg-red-50 rounded-md border border-slate-200 transition-colors absolute -top-2 -right-2 shadow-sm"
                       aria-label="Remove attachment"
