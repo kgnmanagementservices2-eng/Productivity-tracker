@@ -111,13 +111,13 @@ export const Sidebar = () => {
         "MARKET_MANAGER",
       ],
     },
-    // {
-    //   name: "Performance",
-    //   path: "/performance",
-    //   icon: PhoneCall,
-    //   group: "Overview",
-    //   allowedRoles: ["GLOBAL_ADMIN", "CEO"],
-    // },
+    {
+      name: "Performance",
+      path: "/performance",
+      icon: PhoneCall,
+      group: "Overview",
+      allowedRoles: ["GLOBAL_ADMIN", "CEO"],
+    },
     {
       name: "Team Groups",
       path: "/groups",

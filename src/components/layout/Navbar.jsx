@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
-// 🟢 NEW: Import the socket context
 import { useSocket } from "../../context/SocketContext";
 import api from "../../services/api";
 import {
@@ -22,7 +21,6 @@ import { cn } from "../../utils/cn";
 export const Navbar = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  // 🟢 NEW: Initialize socket
   const socket = useSocket();
 
   // UI Controls
@@ -37,7 +35,6 @@ export const Navbar = () => {
   const profileRef = useRef(null);
   const notifRef = useRef(null);
 
-  // 🟢 UPDATED: Moved fetch function outside so it can be reused by the socket listener
   const fetchNotifications = async () => {
     try {
       const res = await api.get("/notifications");
@@ -57,27 +54,22 @@ export const Navbar = () => {
     }
   }, [user]);
 
-  // 🟢 NEW: Live Socket Listener for Notifications & Sounds
+  // Live Socket Listener for Notifications & Sounds
   useEffect(() => {
     if (!socket) return;
 
     const handleLiveAlert = () => {
-      // 1. Play the ring sound (Ensure you have notification.mp3 in your public folder)
       const audio = new Audio("/notification.mp3");
       audio.play().catch((error) => {
         console.log("Browser auto-play blocked the notification sound:", error);
       });
-
-      // 2. Fetch the latest notifications to update the Bell icon live
       fetchNotifications();
     };
 
-    // Listen for all system events that generate notifications
     socket.on("new_ticket_assigned", handleLiveAlert);
     socket.on("ticket_reassigned_to_you", handleLiveAlert);
     socket.on("new_ticket_message", handleLiveAlert);
 
-    // Cleanup listeners on unmount
     return () => {
       socket.off("new_ticket_assigned", handleLiveAlert);
       socket.off("ticket_reassigned_to_you", handleLiveAlert);
@@ -90,11 +82,9 @@ export const Navbar = () => {
     try {
       await api.put(`/notifications/${id}/read`);
 
-      // Update local state instantly so the UI feels fast
       setNotifications((prev) => prev.filter((n) => n.id !== id));
       setUnreadCount((prev) => Math.max(0, prev - 1));
 
-      // If it's a ticket notification, navigate the user straight to it!
       if (referenceId) {
         setIsNotifOpen(false);
         navigate(`/tickets/${referenceId}`);
@@ -108,19 +98,14 @@ export const Navbar = () => {
   const handleClearAll = async () => {
     if (notifications.length === 0) return;
 
-    // 1. Save current state just in case it fails
     const currentNotifs = [...notifications];
-
-    // 2. Optimistically clear UI instantly for a snappy feel
     setNotifications([]);
     setUnreadCount(0);
 
     try {
-      // 3. One single blazing fast API call!
       await api.put(`/notifications/read-all`);
     } catch (error) {
       console.error("Failed to clear all notifications", error);
-      // Revert UI if the network request fails
       setNotifications(currentNotifs);
       setUnreadCount(currentNotifs.length);
     }
@@ -164,7 +149,7 @@ export const Navbar = () => {
                 month: "short",
                 day: "numeric",
                 timeZone: "America/Chicago",
-                hour12: true, // Forces the UI to evaluate and print strictly in Central Time
+                hour12: true,
               }).format(new Date())}
             </p>
           </div>
@@ -284,9 +269,19 @@ export const Navbar = () => {
               }}
               className="flex items-center gap-2.5 pl-1 pr-2.5 py-1 rounded-full border border-transparent hover:bg-slate-100/80 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50"
             >
-              <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-indigo-500 to-violet-500 text-white flex items-center justify-center font-bold text-xs shadow-sm ring-2 ring-white">
-                {(user?.name || "U")[0].toUpperCase()}
-              </div>
+              {/* 🟢 NEW: Profile Image with fallback to Initials */}
+              {user?.profile_url ? (
+                <img
+                  src={user.profile_url}
+                  alt="Profile"
+                  className="h-8 w-8 rounded-full object-cover shadow-sm ring-2 ring-white"
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-indigo-500 to-violet-500 text-white flex items-center justify-center font-bold text-xs shadow-sm ring-2 ring-white">
+                  {(user?.name || "U")[0].toUpperCase()}
+                </div>
+              )}
+
               <div className="flex-col text-left hidden md:flex">
                 <span className="text-xs font-bold text-slate-800 leading-none">
                   {user?.name || "System User"}
@@ -302,9 +297,19 @@ export const Navbar = () => {
               <div className="absolute right-0 top-[calc(100%+8px)] w-72 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-200/80 overflow-hidden origin-top-right animate-in fade-in zoom-in-95 duration-200 z-50">
                 {/* Profile Header */}
                 <div className="p-5 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50">
-                  <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-indigo-500 to-violet-500 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
-                    {(user?.name || "U")[0].toUpperCase()}
-                  </div>
+                  {/* 🟢 NEW: Profile Image in Dropdown Header */}
+                  {user?.profile_url ? (
+                    <img
+                      src={user.profile_url}
+                      alt="Profile"
+                      className="h-12 w-12 rounded-full object-cover shadow-sm shrink-0"
+                    />
+                  ) : (
+                    <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-indigo-500 to-violet-500 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+                      {(user?.name || "U")[0].toUpperCase()}
+                    </div>
+                  )}
+
                   <div className="flex flex-col min-w-0">
                     <h3 className="font-bold text-slate-900 truncate">
                       {user?.name || "System User"}
