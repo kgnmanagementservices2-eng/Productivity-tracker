@@ -57,6 +57,23 @@ const parseSafeDate = (dateVal) => {
   return isNaN(parsed) ? new Date() : parsed;
 };
 
+// 🟢 SENIOR DEV ADDITION: Centralized TAT Breach Logic
+const checkTatBreach = (ticket) => {
+  if (!ticket.tat) return false;
+
+  const tatDate = parseSafeDate(ticket.tat);
+  const isClosed = ticket.status === "CLOSED" || ticket.status === "RESOLVED";
+
+  // If closed, freeze the breach calculation at the time of closure (updated_at).
+  // If open, calculate against the current time.
+  const referenceDate =
+    isClosed && ticket.updated_at
+      ? parseSafeDate(ticket.updated_at)
+      : new Date();
+
+  return referenceDate > tatDate;
+};
+
 export default function TicketList() {
   const [tickets, setTickets] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -72,6 +89,9 @@ export default function TicketList() {
   const [marketsList, setMarketsList] = useState([]);
 
   const [showFilters, setShowFilters] = useState(false);
+
+  // 🟢 NEW STATE: TAT Breach Toggle
+  const [showTatBreachedOnly, setShowTatBreachedOnly] = useState(false);
 
   const [departmentsList, setDepartmentsList] = useState([]);
   const [allMembersList, setAllMembersList] = useState([]);
@@ -187,7 +207,7 @@ export default function TicketList() {
     priorityFilter,
     departmentFilter,
     assigneeFilter,
-    marketFilter, 
+    marketFilter,
   ]);
 
   useEffect(() => {
@@ -201,24 +221,29 @@ export default function TicketList() {
     };
   }, [socket, page]);
 
-  // 🟢 SENIOR DEV UX: Memoized sorting logic to bubble issues to the top
+  // 🟢 SENIOR DEV UX: Memoized sorting logic updated to include the Breach Toggle
   const filteredTickets = useMemo(() => {
     return tickets
-      .filter(
-        (t) =>
+      .filter((t) => {
+        // Apply the TAT Breach filter first
+        if (showTatBreachedOnly && !checkTatBreach(t)) return false;
+
+        // Then apply search terms
+        return (
           t.category_level_1.toLowerCase().includes(searchTerm.toLowerCase()) ||
           t.category_level_2.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          t.id.includes(searchTerm),
-      )
+          t.id.includes(searchTerm)
+        );
+      })
       .sort((a, b) => {
         // 1. Issues always bubble to the absolute top
         if (a.is_issue && !b.is_issue) return -1;
         if (!a.is_issue && b.is_issue) return 1;
-        
+
         // 2. Keep the remaining items sorted by created_at (newest first)
         return parseSafeDate(b.created_at) - parseSafeDate(a.created_at);
       });
-  }, [tickets, searchTerm]);
+  }, [tickets, searchTerm, showTatBreachedOnly]);
 
   const availableMembers = allMembersList.filter((m) => {
     if (!departmentFilter) return true;
@@ -239,6 +264,7 @@ export default function TicketList() {
     setAssigneeFilter("");
     setMarketFilter("");
     setSearchTerm("");
+    setShowTatBreachedOnly(false);
     setPage(1);
   };
 
@@ -474,6 +500,7 @@ export default function TicketList() {
     );
   };
 
+  // 🟢 UPGRADED: renderTAT now handles post-closure breaches (Orange)
   const renderTAT = (ticket) => {
     if (!ticket.tat) {
       return (
@@ -485,20 +512,42 @@ export default function TicketList() {
 
     const tatDate = parseSafeDate(ticket.tat);
     const isClosed = ticket.status === "CLOSED" || ticket.status === "RESOLVED";
-    const isOverdue = !isClosed && new Date() > tatDate;
+    const isBreached = checkTatBreach(ticket);
+
+    // Determine colors based on status and breach
+    let colorClass = "text-slate-700";
+    let iconClass = "text-slate-400";
+    let timeClass = "text-slate-500";
+    let badgeText = "";
+    let badgeClass = "";
+
+    if (isBreached) {
+      if (isClosed) {
+        // Requirement: Show TAT orange after ticket is closed
+        colorClass = "text-orange-600";
+        iconClass = "text-orange-500";
+        timeClass = "text-orange-500";
+        badgeText = "BREACHED (CLOSED)";
+        badgeClass = "text-orange-500";
+      } else {
+        // Open and overdue stays red
+        colorClass = "text-red-600";
+        iconClass = "text-red-500";
+        timeClass = "text-red-500";
+        badgeText = "OVERDUE";
+        badgeClass = "text-red-500";
+      }
+    }
 
     return (
       <div className="flex flex-col">
         <div
           className={cn(
             "flex items-center gap-1.5 font-bold text-sm",
-            isOverdue ? "text-red-600" : "text-slate-700",
+            colorClass,
           )}
         >
-          <CalendarClock
-            size={14}
-            className={isOverdue ? "text-red-500" : "text-slate-400"}
-          />
+          <CalendarClock size={14} className={iconClass} />
           <span>
             {new Intl.DateTimeFormat("en-US", {
               month: "short",
@@ -507,12 +556,7 @@ export default function TicketList() {
             }).format(tatDate)}
           </span>
         </div>
-        <div
-          className={cn(
-            "text-xs font-medium ml-5",
-            isOverdue ? "text-red-500" : "text-slate-500",
-          )}
-        >
+        <div className={cn("text-xs font-medium ml-5", timeClass)}>
           {new Intl.DateTimeFormat("en-US", {
             hour: "numeric",
             minute: "2-digit",
@@ -520,9 +564,14 @@ export default function TicketList() {
             hour12: true,
           }).format(tatDate)}
         </div>
-        {isOverdue && (
-          <span className="text-[9px] uppercase font-bold tracking-wider text-red-500 ml-5 mt-0.5">
-            OVERDUE
+        {isBreached && (
+          <span
+            className={cn(
+              "text-[9px] uppercase font-bold tracking-wider ml-5 mt-0.5",
+              badgeClass,
+            )}
+          >
+            {badgeText}
           </span>
         )}
       </div>
@@ -532,12 +581,13 @@ export default function TicketList() {
   // 🟢 SENIOR DEV UX: Custom Row Styles indicating severity
   const getRowStyle = (ticket) => {
     if (ticket.is_issue) return "border-l-4 border-l-red-500";
-    if (ticket.status === "CLOSED" || ticket.status === "RESOLVED") return "border-l-4 border-l-transparent";
-    
+    if (ticket.status === "CLOSED" || ticket.status === "RESOLVED")
+      return "border-l-4 border-l-transparent";
+
     const start = parseSafeDate(ticket.created_at);
     const hoursOpen = (new Date() - start) / (1000 * 60 * 60);
-    
-    if (hoursOpen >= 12) return "border-l-4 border-l-orange-500"; 
+
+    if (hoursOpen >= 12) return "border-l-4 border-l-orange-500";
     if (hoursOpen >= 6) return "border-l-4 border-l-amber-400";
     return "border-l-4 border-l-indigo-500";
   };
@@ -622,6 +672,19 @@ export default function TicketList() {
               </div>
 
               <div className="flex w-full md:w-auto gap-3 items-center justify-end">
+                {/* 🟢 NEW: TAT Breach Toggle */}
+                <label className="flex items-center gap-2 cursor-pointer bg-white border border-slate-300 px-3 h-11 rounded-lg shadow-sm hover:bg-slate-50 transition-colors">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                    checked={showTatBreachedOnly}
+                    onChange={(e) => setShowTatBreachedOnly(e.target.checked)}
+                  />
+                  <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">
+                    TAT Breached
+                  </span>
+                </label>
+
                 <Button
                   onClick={() => setShowFilters(!showFilters)}
                   className={cn(
@@ -859,7 +922,9 @@ export default function TicketList() {
                       key={ticket.id}
                       className={cn(
                         "transition-colors cursor-default group",
-                        ticket.is_issue ? "bg-red-50/40 hover:bg-red-50/80" : "bg-white hover:bg-slate-50/80",
+                        ticket.is_issue
+                          ? "bg-red-50/40 hover:bg-red-50/80"
+                          : "bg-white hover:bg-slate-50/80",
                         getRowStyle(ticket),
                       )}
                     >
