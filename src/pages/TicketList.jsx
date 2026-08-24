@@ -25,6 +25,7 @@ import {
   Filter,
   MapPin,
   AlertOctagon,
+  LifeBuoy,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -90,7 +91,7 @@ export default function TicketList() {
 
   const [showFilters, setShowFilters] = useState(false);
 
-  // 🟢 NEW STATE: TAT Breach Toggle
+  // 🟢 TAT Breach Toggle State
   const [showTatBreachedOnly, setShowTatBreachedOnly] = useState(false);
 
   const [departmentsList, setDepartmentsList] = useState([]);
@@ -470,7 +471,6 @@ export default function TicketList() {
       100,
     );
 
-    // 🟢 UPDATED SLA COLORS: Red is reserved for is_issue tickets. SLA breaches are now Orange.
     let barColor = "bg-indigo-500";
     let trackColor = "bg-indigo-100";
 
@@ -578,11 +578,15 @@ export default function TicketList() {
     );
   };
 
-  // 🟢 SENIOR DEV UX: Custom Row Styles indicating severity
+  // 🟢 SENIOR DEV UX: Check tags and apply highlighted yellow border
   const getRowStyle = (ticket) => {
     if (ticket.is_issue) return "border-l-4 border-l-red-500";
     if (ticket.status === "CLOSED" || ticket.status === "RESOLVED")
       return "border-l-4 border-l-transparent";
+
+    if (Array.isArray(ticket.tags) && ticket.tags.includes("SUPPORT")) {
+      return "border-l-4 border-l-yellow-400";
+    }
 
     const start = parseSafeDate(ticket.created_at);
     const hoursOpen = (new Date() - start) / (1000 * 60 * 60);
@@ -672,7 +676,7 @@ export default function TicketList() {
               </div>
 
               <div className="flex w-full md:w-auto gap-3 items-center justify-end">
-                {/* 🟢 NEW: TAT Breach Toggle */}
+                {/* 🟢 TAT Breach Toggle */}
                 <label className="flex items-center gap-2 cursor-pointer bg-white border border-slate-300 px-3 h-11 rounded-lg shadow-sm hover:bg-slate-50 transition-colors">
                   <input
                     type="checkbox"
@@ -681,7 +685,7 @@ export default function TicketList() {
                     onChange={(e) => setShowTatBreachedOnly(e.target.checked)}
                   />
                   <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">
-                    TAT Breached
+                    TAT Breached Only
                   </span>
                 </label>
 
@@ -924,7 +928,10 @@ export default function TicketList() {
                         "transition-colors cursor-default group",
                         ticket.is_issue
                           ? "bg-red-50/40 hover:bg-red-50/80"
-                          : "bg-white hover:bg-slate-50/80",
+                          : Array.isArray(ticket.tags) &&
+                              ticket.tags.includes("SUPPORT")
+                            ? "bg-yellow-50/30 hover:bg-yellow-50/80"
+                            : "bg-white hover:bg-slate-50/80",
                         getRowStyle(ticket),
                       )}
                     >
@@ -943,12 +950,22 @@ export default function TicketList() {
                               <Copy size={14} />
                             </button>
                           </div>
-                          {/* 🟢 NEW: Inline Issue Flag */}
                           {ticket.is_issue && (
                             <span className="flex items-center gap-1 w-fit bg-red-100 text-red-700 font-bold text-[9px] px-1.5 py-0.5 rounded shadow-sm">
                               <AlertOctagon size={10} /> FLAGGED ISSUE
                             </span>
                           )}
+                          {/* 🟢 NEW: Inline SUPPORT Tag Badge */}
+                          {Array.isArray(ticket.tags) &&
+                            ticket.tags.includes("SUPPORT") && (
+                              <span className="flex items-center gap-1 w-fit bg-yellow-100 text-yellow-800 font-bold text-[9px] px-1.5 py-0.5 rounded shadow-sm border border-yellow-200/60 uppercase tracking-wider">
+                                <LifeBuoy
+                                  size={10}
+                                  className="text-yellow-600"
+                                />{" "}
+                                SUPPORT
+                              </span>
+                            )}
                         </div>
                       </td>
                       <td className="px-6 py-5 align-middle">
@@ -996,7 +1013,10 @@ export default function TicketList() {
                       </td>
                       <td className="px-6 py-5 align-middle text-right">
                         <div className="flex justify-end items-center gap-3">
+                          {/* 🟢 STRICT SECURITY: Only the EXACT assignee can escalate the ticket */}
                           {user?.role === "BACK_OFFICE_MEMBER" &&
+                            String(ticket.assignee_id) ===
+                              String(user?.id || user?.userId) &&
                             ticket.status !== "CLOSED" &&
                             ticket.status !== "RESOLVED" && (
                               <button
@@ -1010,6 +1030,8 @@ export default function TicketList() {
                                 <AlertTriangle size={16} />
                               </button>
                             )}
+
+                          {/* Managers retain full reassignment authority over their department's tickets */}
                           {user?.role === "BACK_OFFICE_MANAGER" &&
                             ticket.status !== "CLOSED" &&
                             ticket.status !== "RESOLVED" && (
@@ -1024,6 +1046,7 @@ export default function TicketList() {
                                 <UserPlus size={16} />
                               </button>
                             )}
+
                           <button
                             onClick={() => navigate(`/tickets/${ticket.id}`)}
                             className="flex items-center gap-1.5 bg-indigo-50 text-indigo-600 font-bold px-4 py-1.5 rounded-lg border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all shadow-sm text-xs tracking-wide"

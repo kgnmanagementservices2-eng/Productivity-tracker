@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Brute-force rule to hide scrollbars on ALL elements */
+* {
+  -ms-overflow-style: none !important; /* IE and Edge */
+  scrollbar-width: none !important; /* Firefox */
+}
+
+*::-webkit-scrollbar {
+  display: none !important; /* Chrome, Safari, and Opera */
+}
 @layer base {
   body {
     /* Sets the universal background and default text color */

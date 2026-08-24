@@ -92,7 +92,7 @@ export default function TicketInfoSection({ ticket }) {
               <div className="flex flex-wrap items-center gap-1.5">
                 {ticket.ticket_type !== "PROACTIVE" && (
                   <span className="text-[9px] font-bold bg-indigo-50/80 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100/50">
-                    {ticket.store_name || "N/A"}
+                    {ticket.store_name || "No Store Selected"}
                   </span>
                 )}
                 <span className="text-[9px] font-bold bg-emerald-50/80 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-100/50">

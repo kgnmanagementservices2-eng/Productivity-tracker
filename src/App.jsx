@@ -11,13 +11,14 @@ import { DashboardLayout } from "./components/layout/DashboardLayout";
 import { TabConflictOverlay } from "./components/TabConflictOverlay";
 import { DesktopBlocker } from "./components/DesktopBlocker";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import FloatingSupportWidget from "./components/FloatingSupportWidget"; // 🟢 NEW: Import the Floating Support Widget
 
 // Public Pages
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import UnauthorizedPage from "./pages/UnauthorizedPage";
-import NoInternetPage from "./pages/NoInternetPage"; // 🟢 NEW: Import No Internet Page
+import NoInternetPage from "./pages/NoInternetPage";
 
 // Protected Pages
 import Dashboard from "./pages/Dashboard";
@@ -29,10 +30,9 @@ import Groups from "./pages/Groups";
 import Workload from "./pages/Workload";
 import CategoryManager from "./pages/CategoryManager";
 import AdminSetup from "./pages/AdminSetup";
-import PerformanceTracker from "./pages/PerformanceTracker"; // 🟢 NEW: Import Performance Tracker
+import PerformanceTracker from "./pages/PerformanceTracker";
 
 function App() {
-  // 🟢 NEW: Track the user's internet connection status
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -54,7 +54,6 @@ function App() {
       <DesktopBlocker />
       <TabConflictOverlay />
 
-      {/* 🟢 NEW: Conditionally render the app or the No Internet page */}
       {!isOnline ? (
         <NoInternetPage />
       ) : (
@@ -79,7 +78,11 @@ function App() {
                   path="/"
                   element={
                     <ProtectedRoute>
-                      <DashboardLayout />
+                      <>
+                        <DashboardLayout />
+                        {/* 🟢 NEW: The Hanging Support Widget will persist across all protected pages */}
+                        <FloatingSupportWidget />
+                      </>
                     </ProtectedRoute>
                   }
                 >
@@ -188,7 +191,6 @@ function App() {
                     }
                   />
 
-                  {/* 🟢 FIXED: Moved Performance Tracker INSIDE the layout wrapper */}
                   <Route
                     path="performance"
                     element={
@@ -230,4 +232,5 @@ function App() {
     </>
   );
 }
+
 export default App;

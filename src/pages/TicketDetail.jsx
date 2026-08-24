@@ -1,3 +1,5 @@
+/* eslint-disable no-unused-vars */
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -74,7 +76,9 @@ export default function TicketDetail() {
   }
 
   if (!ticket) return null;
-  const isAdmin = ["GLOBAL_ADMIN", "CEO"].includes(user?.role);
+  const isAdmin = ["GLOBAL_ADMIN", "CEO", "BACK_OFFICE_MANAGER"].includes(
+    user?.role,
+  );
   const bgTheme = getBackgroundTheme(ticket.status, ticket.is_issue);
 
   return (

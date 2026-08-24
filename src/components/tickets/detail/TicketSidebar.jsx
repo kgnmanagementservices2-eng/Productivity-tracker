@@ -13,6 +13,7 @@ import {
   PhoneMissed,
   PhoneOutgoing,
   PhoneIncoming,
+  Lock,
 } from "lucide-react";
 import { ReassignTicketModal } from "../ReassignTicketModal";
 
@@ -33,7 +34,9 @@ export default function TicketSidebar({
     user?.role === "BACK_OFFICE_MEMBER" || user?.role === "BACK_OFFICE_MANAGER";
   const canRoute =
     isAgent && ticket.status !== "CLOSED" && ticket.status !== "RESOLVED";
-
+  const currentUserId = String(user?.id || user?.userId);
+  const isAssignee =
+    ticket?.assignee_id && String(ticket.assignee_id) === currentUserId;
   const handleFlagIssue = async () => {
     if (!issueReason || issueReason.trim().length < 5) {
       return toast.error(
@@ -76,8 +79,16 @@ export default function TicketSidebar({
       {canRoute && (
         <Card className="shadow-sm border-slate-200/60 rounded-xl bg-white/90 backdrop-blur-md overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-3 pt-4 px-5">
-            <CardTitle className="text-xs font-semibold flex items-center gap-2 text-slate-700 uppercase tracking-wider">
-              <UserPlus size={14} className="text-slate-400" /> Assignment
+            <CardTitle className="text-xs font-semibold flex items-center justify-between text-slate-700 uppercase tracking-wider">
+              <span className="flex items-center gap-2">
+                <UserPlus size={14} className="text-slate-400" /> Assignment
+              </span>
+              {/* 🟢 SECURITY INDICATOR: Show lock if the agent is not the assignee */}
+              {user?.role === "BACK_OFFICE_MEMBER" && !isAssignee && (
+                <span className="flex items-center gap-1 text-[9px] bg-slate-200/50 text-slate-500 px-2 py-0.5 rounded-full">
+                  <Lock size={10} /> View Only
+                </span>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-5 space-y-4">
@@ -86,16 +97,17 @@ export default function TicketSidebar({
                 Current Assignee
               </span>
               <div className="font-medium text-slate-900 flex items-center gap-2">
-                <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-bold">
+                <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-bold shadow-sm">
                   {(ticket.assignee_name || "U")[0].toUpperCase()}
                 </div>
                 {ticket.assignee_name || "Unassigned"}
               </div>
             </div>
+
             {user?.role === "BACK_OFFICE_MANAGER" ? (
               <Button
                 variant="secondary"
-                className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-indigo-600 font-medium shadow-sm rounded-lg text-sm"
+                className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-indigo-600 font-medium shadow-sm rounded-lg text-sm transition-colors"
                 onClick={() => {
                   setIsEscalation(false);
                   setIsModalOpen(true);
@@ -106,13 +118,15 @@ export default function TicketSidebar({
             ) : (
               <Button
                 variant="secondary"
-                className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-red-50 hover:text-red-600 hover:border-red-200 font-medium shadow-sm rounded-lg text-sm transition-colors"
+                disabled={!isAssignee} // 🟢 STRICT SECURITY: Lock escalation if not assignee
+                className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-red-50 hover:text-red-600 hover:border-red-200 font-medium shadow-sm rounded-lg text-sm transition-colors disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-slate-700 disabled:hover:border-slate-200 disabled:cursor-not-allowed"
                 onClick={() => {
                   setIsEscalation(true);
                   setIsModalOpen(true);
                 }}
               >
-                <AlertTriangle size={16} /> Escalate Issue
+                <AlertTriangle size={16} />
+                {isAssignee ? "Escalate Issue" : "Cannot Escalate"}
               </Button>
             )}
           </CardContent>
