@@ -9,12 +9,13 @@ import {
   Ticket,
   Settings,
   Users,
-  PhoneCall,
+  TrendingUp, // Updated from PhoneCall
+  LayoutTemplate, // New icon for Task Templates
   MessageSquare,
   FolderTree,
   LogOut,
   Hexagon,
-  Clock, // Imported Clock icon for the live timer
+  Clock,
 } from "lucide-react";
 
 export const Sidebar = () => {
@@ -112,11 +113,27 @@ export const Sidebar = () => {
       ],
     },
     {
+      name: "Task Templates",
+      path: "/task", // Adjust path if your router uses something different
+      icon: LayoutTemplate,
+      group: "Overview",
+      // Unlocked so all roles can access the executing UI
+      allowedRoles: [
+        "CEO",
+        "GLOBAL_ADMIN",
+        "MARKET_MANAGER",
+        "EMPLOYEE",
+        "BACK_OFFICE_MANAGER",
+        "BACK_OFFICE_MEMBER",
+      ],
+    },
+    {
       name: "Performance",
       path: "/performance",
-      icon: PhoneCall,
+      icon: TrendingUp, // Swapped from PhoneCall
       group: "Overview",
-      allowedRoles: ["GLOBAL_ADMIN", "CEO"],
+      // Unlocked so Managers and Employees can view their own performance
+      allowedRoles: ["CEO", "GLOBAL_ADMIN", "BACK_OFFICE_MANAGER"],
     },
     {
       name: "Team Groups",
@@ -137,14 +154,14 @@ export const Sidebar = () => {
       path: "/workload",
       icon: Users,
       group: "Administration",
-      allowedRoles: ["BACK_OFFICE_MANAGER", "GLOBAL_ADMIN"],
+      allowedRoles: ["BACK_OFFICE_MANAGER", "GLOBAL_ADMIN", "CEO"],
     },
     {
       name: "Category Routing",
       path: "/categories",
       icon: FolderTree,
       group: "Administration",
-      allowedRoles: ["GLOBAL_ADMIN", "BACK_OFFICE_MANAGER"],
+      allowedRoles: ["GLOBAL_ADMIN", "BACK_OFFICE_MANAGER", "CEO"],
     },
     {
       name: "Company Setup",

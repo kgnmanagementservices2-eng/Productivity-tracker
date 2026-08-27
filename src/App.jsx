@@ -31,6 +31,7 @@ import Workload from "./pages/Workload";
 import CategoryManager from "./pages/CategoryManager";
 import AdminSetup from "./pages/AdminSetup";
 import PerformanceTracker from "./pages/PerformanceTracker";
+import TaskTemplates from "./pages/TaskTemplates";
 
 function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -190,11 +191,32 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
+                  <Route
+                    path="task"
+                    element={
+                      <ProtectedRoute
+                        allowedRoles={[
+                          "BACK_OFFICE_MANAGER",
+                          "GLOBAL_ADMIN",
+                          "BACK_OFFICE_MEMBER",
+                        ]}
+                      >
+                        <TaskTemplates />
+                      </ProtectedRoute>
+                    }
+                  />
 
                   <Route
                     path="performance"
                     element={
-                      <ProtectedRoute allowedRoles={["GLOBAL_ADMIN", "CEO"]}>
+                      <ProtectedRoute
+                        allowedRoles={[
+                          "GLOBAL_ADMIN",
+                          "CEO",
+                          "BACK_OFFICE_MANAGER",
+                          "BACK_OFFICE_MEMBER",
+                        ]}
+                      >
                         <PerformanceTracker />
                       </ProtectedRoute>
                     }

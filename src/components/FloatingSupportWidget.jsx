@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
@@ -339,13 +340,13 @@ export default function FloatingSupportWidget() {
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                       <Building size={12} className="text-indigo-500" /> Select
-                      Market
+                      Client
                     </label>
                     <select
                       {...register("marketId")}
                       className="w-full text-sm p-2.5 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-slate-50 hover:bg-white transition-colors"
                     >
-                      <option value="">Select Market (Optional)</option>
+                      <option value="">Select Client...</option>
                       {markets.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.name}
