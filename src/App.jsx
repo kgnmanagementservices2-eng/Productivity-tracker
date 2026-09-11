@@ -32,7 +32,7 @@ import CategoryManager from "./pages/CategoryManager";
 import AdminSetup from "./pages/AdminSetup";
 import PerformanceTracker from "./pages/PerformanceTracker";
 import TaskTemplates from "./pages/TaskTemplates";
-
+import UserManual from "./pages/UserManual"; // 🟢 NEW: Import the User Manual Page
 function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -179,7 +179,7 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
-
+                  <Route path="manual" element={<UserManual />} />
                   {/* --- Administration Group --- */}
                   <Route
                     path="workload"
