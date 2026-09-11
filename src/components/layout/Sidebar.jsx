@@ -9,13 +9,14 @@ import {
   Ticket,
   Settings,
   Users,
-  TrendingUp, // Updated from PhoneCall
-  LayoutTemplate, // New icon for Task Templates
+  TrendingUp,
+  LayoutTemplate,
   MessageSquare,
   FolderTree,
   LogOut,
   Hexagon,
   Clock,
+  BookOpen, // Newly imported for the Manual
 } from "lucide-react";
 
 export const Sidebar = () => {
@@ -27,7 +28,6 @@ export const Sidebar = () => {
   const [time, setTime] = useState(new Date());
   const [timeOffset, setTimeOffset] = useState(0);
 
-  // 1. Fetch True Server Time exactly once on mount
   useEffect(() => {
     const fetchTrueTime = async () => {
       try {
@@ -35,14 +35,8 @@ export const Sidebar = () => {
           "https://worldtimeapi.org/api/timezone/America/Chicago",
         );
         const data = await response.json();
-
-        // Convert the exact server time to a Unix Timestamp
         const serverTime = new Date(data.datetime).getTime();
-
-        // Get the user's current computer time
         const localTime = Date.now();
-
-        // Calculate the drift (How far off is their computer?)
         const drift = serverTime - localTime;
         setTimeOffset(drift);
       } catch (error) {
@@ -51,21 +45,16 @@ export const Sidebar = () => {
         );
       }
     };
-
     fetchTrueTime();
   }, []);
 
-  // 2. Tick the clock locally, but apply the true offset
   useEffect(() => {
     const timerId = setInterval(() => {
-      // Date.now() + timeOffset guarantees it matches the True Server Time
       setTime(new Date(Date.now() + timeOffset));
     }, 1000);
-
-    return () => clearInterval(timerId); // Cleanup on unmount
+    return () => clearInterval(timerId);
   }, [timeOffset]);
 
-  // 3. Format the time forcing CST (America/Chicago)
   const formattedTime = time.toLocaleTimeString("en-US", {
     timeZone: "America/Chicago",
     hour: "numeric",
@@ -114,10 +103,9 @@ export const Sidebar = () => {
     },
     {
       name: "Task Templates",
-      path: "/task", // Adjust path if your router uses something different
+      path: "/task",
       icon: LayoutTemplate,
       group: "Overview",
-      // Unlocked so all roles can access the executing UI
       allowedRoles: [
         "CEO",
         "GLOBAL_ADMIN",
@@ -130,9 +118,8 @@ export const Sidebar = () => {
     {
       name: "Performance",
       path: "/performance",
-      icon: TrendingUp, // Swapped from PhoneCall
+      icon: TrendingUp,
       group: "Overview",
-      // Unlocked so Managers and Employees can view their own performance
       allowedRoles: ["CEO", "GLOBAL_ADMIN", "BACK_OFFICE_MANAGER"],
     },
     {
@@ -170,14 +157,26 @@ export const Sidebar = () => {
       group: "Administration",
       allowedRoles: ["CEO", "GLOBAL_ADMIN"],
     },
+    {
+      name: "User Manual",
+      path: "/manual",
+      icon: BookOpen,
+      group: "Resources",
+      allowedRoles: [
+        "CEO",
+        "GLOBAL_ADMIN",
+        "MARKET_MANAGER",
+        "EMPLOYEE",
+        "BACK_OFFICE_MANAGER",
+        "BACK_OFFICE_MEMBER",
+      ],
+    },
   ];
 
-  // Filter links based on the user's secure JWT role
   const visibleLinks = navItems.filter((item) =>
     item.allowedRoles.includes(user?.role),
   );
 
-  // Group the filtered links for rendering
   const groupedLinks = visibleLinks.reduce((acc, link) => {
     if (!acc[link.group]) acc[link.group] = [];
     acc[link.group].push(link);
@@ -185,22 +184,22 @@ export const Sidebar = () => {
   }, {});
 
   return (
-    <aside className="w-64 flex flex-col h-screen fixed left-0 top-0 bg-[var(--tenant-primary,#020617)] border-r border-white/10 z-50">
+    <aside className="w-64 flex flex-col h-screen fixed left-0 top-0 bg-[var(--tenant-primary,#020617)] border-r border-white/5 z-50 shadow-2xl">
       {/* Brand Logo Area */}
-      <div className="h-18 flex items-center px-6 border-b border-white/10 shrink-0">
+      <div className="h-18 flex items-center px-6 border-b border-white/5 shrink-0 bg-black/10">
         <img
           src={logo}
           alt="Productivity Tracker"
-          className="h-[4.5rem] w-auto object-contain"
+          className="h-[4.5rem] w-auto object-contain drop-shadow-md"
         />
       </div>
 
       {/* Navigation Links */}
       <nav className="flex-1 px-4 py-6 overflow-y-auto custom-scrollbar space-y-8">
         {Object.entries(groupedLinks).map(([groupName, links]) => (
-          <div key={groupName} className="space-y-1.5">
-            {/* Group Header */}
-            <h4 className="px-3 text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mb-3">
+          <div key={groupName} className="space-y-2">
+            {/* Polished Group Header */}
+            <h4 className="px-3 text-[10px] font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-slate-400 to-slate-600 uppercase tracking-widest mb-3">
               {groupName}
             </h4>
 
@@ -213,10 +212,10 @@ export const Sidebar = () => {
                   to={link.path}
                   className={({ isActive }) =>
                     cn(
-                      "group relative flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 font-medium text-sm outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50",
+                      "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-300 font-medium text-sm outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50",
                       isActive
-                        ? "bg-white/10 text-white shadow-sm"
-                        : "text-slate-400 hover:bg-white/5 hover:text-slate-200",
+                        ? "bg-gradient-to-r from-indigo-500/20 to-transparent text-white shadow-sm ring-1 ring-indigo-500/30"
+                        : "text-slate-400 hover:bg-white/5 hover:text-slate-200 hover:translate-x-1",
                     )
                   }
                 >
@@ -224,13 +223,13 @@ export const Sidebar = () => {
                     <>
                       {/* Premium Active Indicator */}
                       {isActive && (
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-indigo-500 rounded-r-full shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-indigo-500 rounded-r-full shadow-[0_0_12px_rgba(99,102,241,0.8)]" />
                       )}
 
                       <Icon
                         size={18}
                         className={cn(
-                          "transition-colors duration-200",
+                          "transition-colors duration-300",
                           isActive
                             ? "text-indigo-400"
                             : "text-slate-500 group-hover:text-slate-300",
@@ -248,8 +247,8 @@ export const Sidebar = () => {
 
       {/* 🟢 True CST Live Clock Widget */}
       <div className="px-4 pb-3 shrink-0">
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 shadow-inner">
-          <div className="text-indigo-400/80 bg-indigo-500/10 p-1.5 rounded-lg shrink-0">
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gradient-to-b from-white/5 to-transparent border border-white/5 shadow-inner">
+          <div className="text-indigo-400/80 bg-indigo-500/10 p-1.5 rounded-lg shrink-0 ring-1 ring-indigo-500/20">
             <Clock size={16} className="animate-pulse" />
           </div>
           <div className="flex flex-col overflow-hidden">
@@ -264,15 +263,15 @@ export const Sidebar = () => {
       </div>
 
       {/* User Profile Footer */}
-      <div className="p-4 border-t border-white/10 shrink-0">
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors duration-200 group">
+      <div className="p-4 border-t border-white/5 shrink-0 bg-black/10">
+        <div className="flex items-center gap-3 p-3 rounded-xl border border-transparent hover:bg-white/5 hover:border-white/10 transition-all duration-300 group cursor-pointer">
           {/* Avatar Initials */}
-          <div className="h-9 w-9 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 font-bold text-sm shrink-0">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 font-bold text-sm shrink-0 shadow-inner">
             {(user?.name || "U")[0].toUpperCase()}
           </div>
 
           <div className="flex flex-col flex-1 min-w-0">
-            <span className="text-sm font-bold text-slate-200 truncate">
+            <span className="text-sm font-bold text-slate-200 truncate group-hover:text-white transition-colors">
               {user?.name || "System User"}
             </span>
             <span className="text-[10px] font-medium text-slate-500 truncate uppercase tracking-wider">
@@ -282,7 +281,7 @@ export const Sidebar = () => {
 
           <button
             onClick={logout}
-            className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+            className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 focus:ring-2 focus:ring-red-500/50 outline-none"
             aria-label="Log out"
           >
             <LogOut size={16} />
